@@ -1,4 +1,5 @@
-
+# 先打开 brook http 代理
+# ~/bk socks5tohttp -s 127.0.0.1:1080 -l 0.0.0.0:8011 &
 
 
 # docker build -t nanjiren01/aichat-web:0.11.4 ../AIChatWeb
@@ -13,6 +14,8 @@ WORKDIR /app
 COPY package.json yarn.lock ./
 
 RUN yarn config set registry https://registry.npmmirror.com/
+RUN yarn config set proxy http://172.17.0.1:8011
+RUN yarn config set https-proxy http://172.17.0.1:8011
 RUN yarn install
 
 COPY . .
