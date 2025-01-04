@@ -79,22 +79,7 @@ export function Balance() {
       (pkg.tokens
         ? `<li>${prefix} <span style="font-size: 18px;">${
             pkg.tokens === -1 ? "无限" : pkg.tokens
-          }</span> tokens</li>`
-        : "") +
-      (pkg.chatCount
-        ? `<li>${prefix} <span style="font-size: 18px;">${
-            pkg.chatCount === -1 ? "无限" : pkg.chatCount
-          }</span> 基础聊天积分</li>`
-        : "") +
-      (pkg.advancedChatCount
-        ? `<li>${prefix} <span style="font-size: 18px;">${
-            pkg.advancedChatCount === -1 ? "无限" : pkg.advancedChatCount
-          }</span> 高级聊天积分</li>`
-        : "") +
-      (pkg.drawCount
-        ? `<li>${prefix} <span style="font-size: 18px;">${
-            pkg.drawCount === -1 ? "无限" : pkg.drawCount
-          }</span> 绘画积分</li>`
+          }</span> 算力积分</li>`
         : "") +
       `<li>到期时间：<span style="font-size: 18px;">${pkg.expireTime}</span></li>` +
       `</ul>`

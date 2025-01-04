@@ -32,7 +32,7 @@ export async function request(
   try {
     const BASE_URL = process.env.BASE_URL;
     const mode = process.env.BUILD_MODE;
-    // console.log('BASE_URL', BASE_URL)
+    console.log("BASE_URL", BASE_URL);
     // console.log('mode', mode)
     let requestUrl = (mode === "export" ? BASE_URL : "") + "/api" + url;
     const res = await fetch(requestUrl, {
