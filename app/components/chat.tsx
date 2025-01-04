@@ -1066,7 +1066,7 @@ function RefreshDrawStatus(props: {
 
 type RenderMessage = ChatMessage & { preview?: boolean };
 
-function _Chat(props: {
+function ChatCom(props: {
   setRequestingSession: Dispatch<SetStateAction<ChatSession | null>>;
 }) {
   const chatStore = useChatStore();
@@ -2875,9 +2875,9 @@ export function Chat(props: {
   const chatStore = useChatStore();
   const sessionIndex = chatStore.currentSessionIndex;
   return (
-    <_Chat
+    <ChatCom
       key={sessionIndex}
       setRequestingSession={props.setRequestingSession}
-    ></_Chat>
+    ></ChatCom>
   );
 }
