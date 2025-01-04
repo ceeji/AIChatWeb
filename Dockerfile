@@ -22,7 +22,7 @@ RUN chmod +x /app/node_modules/.bin/cross-env
 RUN yarn build
 
 # 构建最终容器
-FROM node:18-alpine
+FROM m.daocloud.io/docker.io/library/node:18-alpine
 
 WORKDIR /app
 
