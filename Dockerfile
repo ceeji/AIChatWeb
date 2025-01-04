@@ -6,7 +6,7 @@
 # docker tag nanjiren01/aichat-web:0.11.4 nanjiren01/aichat-web:pro-latest
 # docker push nanjiren01/aichat-web:pro-latest
 
-FROM node:18-alpine AS builder
+FROM m.daocloud.io/docker.io/library/node:18-alpine AS builder
 
 WORKDIR /app
 
