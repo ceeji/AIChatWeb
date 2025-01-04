@@ -13,7 +13,7 @@ WORKDIR /app
 
 COPY package.json yarn.lock ./
 
-RUN yarn config set registry https://registry.npmmirror.com/
+#RUN yarn config set registry https://registry.npmmirror.com/
 RUN yarn config set proxy http://172.17.0.1:8011
 RUN yarn config set https-proxy http://172.17.0.1:8011
 RUN yarn install
