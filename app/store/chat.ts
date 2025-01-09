@@ -305,6 +305,25 @@ export const useChatStore = createPersistStore(
       //   });
       // },
 
+      async updateSessionMaxTokens(
+        modelConfig: ModelConfig,
+      ): Promise<ModelConfig> {
+        if (
+          modelConfig.model == "AI对话（高级）" ||
+          modelConfig.model == "AI对话（普通）" ||
+          modelConfig.model == "识图对话（高级）" ||
+          modelConfig.model == "Kimi（128K长文本）"
+        ) {
+          modelConfig.max_tokens = 100000;
+        } else if (modelConfig.model == "AI写作专用") {
+          modelConfig.max_tokens = 180000;
+        } else {
+          modelConfig.max_tokens = 6000;
+        }
+
+        return modelConfig;
+      },
+
       // 从0.11开始所有session都记录到服务器中
       async newSession(
         token: string,
@@ -326,6 +345,13 @@ export const useChatStore = createPersistStore(
               ...mask.modelConfig,
             },
           };
+
+          // baiyan
+          // 这里强行修改 max_tokens
+          session.mask.modelConfig = await this.updateSessionMaxTokens(
+            session.mask.modelConfig,
+          );
+
           session.topic = mask.name;
         } else if (assistant) {
           session.assistant = { ...assistant };
@@ -1643,6 +1669,9 @@ export const useChatStore = createPersistStore(
           set(() => ({ sessions }));
           return Promise.resolve(true);
         }
+
+        // baiyan: 强行更新 max_tokens
+        mask.modelConfig = await this.updateSessionMaxTokens(mask.modelConfig);
 
         const url = "/session";
         const BASE_URL = process.env.BASE_URL;

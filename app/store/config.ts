@@ -60,13 +60,13 @@ export const DEFAULT_CONFIG = {
   models: DEFAULT_MODELS as any as LLMModel[],
 
   modelConfig: {
-    model: "gpt-3.5-turbo" as ModelType,
+    model: "gpt-4o" as ModelType,
     avatarEmoji: "",
     contentType: "Text" as ModelContentType,
     messageStruct: "normal" as ModelMessageStruct,
     temperature: 0.8,
     top_p: 1,
-    max_tokens: 0, // baiyan：弃用默认不传递可能更好
+    max_tokens: 100000, // baiyan：弃用默认不传递可能更好
     presence_penalty: 0,
     frequency_penalty: 0,
     sendMemory: true,
