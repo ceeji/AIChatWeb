@@ -1078,6 +1078,7 @@ export const useChatStore = createPersistStore(
         const contextStartIndex = Math.max(clearContextIndex, memoryStartIndex);
         const maxTokenThreshold =
           modelConfig.max_tokens > 200 ? modelConfig.max_tokens : 100000; // 默认 128 K
+        // 理论上这里应该根据模型的能力进行设置，但暂时无法实现
 
         // debug
         console.log(
