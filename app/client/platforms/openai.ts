@@ -95,7 +95,7 @@ export class ChatGPTApi implements LLMApi {
 
     const messages = (
       isServerSyncedChat // 如果是服务器同步会话，那么仅发送最近一条用户的message
-        ? options.messages // [options.userMessage]
+        ? [options.userMessage] //
         : options.messages
     ).map((message) => {
       if (!isMessageStructComplex) {
