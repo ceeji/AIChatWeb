@@ -79,6 +79,18 @@ export class ChatGPTApi implements LLMApi {
     const plugins = options.plugins;
     const isMessageStructComplex =
       options.mask?.modelConfig?.messageStruct === "complex";
+    const isServerSyncedChat =
+      typeof options.sessionUuid == "string" &&
+      options.sessionUuid.length > 0 &&
+      options.userMessage != null;
+
+    console.log(
+      "[chat] isServerSyncedChat: ",
+      isServerSyncedChat,
+      "sessionUuid",
+      options.sessionUuid,
+    );
+
     const messages = (
       options.sessionUuid && options.userMessage // 如果是服务器同步会话，那么仅发送最近一条用户的message
         ? [options.userMessage]
