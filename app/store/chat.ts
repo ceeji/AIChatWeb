@@ -1076,7 +1076,8 @@ export const useChatStore = createPersistStore(
           : shortTermMemoryStartIndex;
         // and if user has cleared history messages, we should exclude the memory too.
         const contextStartIndex = Math.max(clearContextIndex, memoryStartIndex);
-        const maxTokenThreshold = modelConfig.max_tokens;
+        const maxTokenThreshold =
+          modelConfig.max_tokens > 200 ? modelConfig.max_tokens : 100000; // 默认 128 K
 
         // debug
         console.log(
