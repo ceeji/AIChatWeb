@@ -625,7 +625,14 @@ export const useChatStore = createPersistStore(
 
         // get recent messages
         const recentMessages = get().getMessagesWithMemory(websiteConfigStore);
+        console.log(
+          "[onUserInput] recentMessages",
+          recentMessages,
+          "userMessage",
+          userMessage,
+        );
         const sendMessages = recentMessages.concat(userMessage);
+        console.log("[onUserInput] sendMessages", sendMessages);
         const messageIndex = get().currentSession().messages.length + 1;
 
         // save user's and bot's message
@@ -1071,6 +1078,16 @@ export const useChatStore = createPersistStore(
         const contextStartIndex = Math.max(clearContextIndex, memoryStartIndex);
         const maxTokenThreshold = modelConfig.max_tokens;
 
+        // debug
+        console.log(
+          "[getMessagesWithMemory] totalMessageCount: ",
+          totalMessageCount,
+          "contextStartIndex",
+          contextStartIndex,
+          "messages",
+          messages,
+        );
+
         // get recent messages as much as possible
         const reversedRecentMessages = [];
         for (
@@ -1091,6 +1108,8 @@ export const useChatStore = createPersistStore(
           ...longTermMemoryPrompts,
           ...reversedRecentMessages.reverse(),
         ];
+
+        console.log("[getMessagesWithMemory] recentMessages:", recentMessages);
 
         return recentMessages;
       },

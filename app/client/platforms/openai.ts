@@ -89,10 +89,12 @@ export class ChatGPTApi implements LLMApi {
       isServerSyncedChat,
       "sessionUuid",
       options.sessionUuid,
+      "options.messages",
+      options.messages,
     );
 
     const messages = (
-      options.sessionUuid && options.userMessage // 如果是服务器同步会话，那么仅发送最近一条用户的message
+      isServerSyncedChat // 如果是服务器同步会话，那么仅发送最近一条用户的message
         ? options.messages // [options.userMessage]
         : options.messages
     ).map((message) => {
