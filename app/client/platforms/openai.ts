@@ -93,9 +93,16 @@ export class ChatGPTApi implements LLMApi {
       options.messages,
     );
 
+    // 默认 userMessage 不为空（下方检查了）
+    const userMessage = options.userMessage as ChatMessage;
+
+    if (isServerSyncedChat && !userMessage) {
+      throw new Error("no user message");
+    }
+
     const messages = (
       isServerSyncedChat // 如果是服务器同步会话，那么仅发送最近一条用户的message
-        ? [options.userMessage] //
+        ? [userMessage] //
         : options.messages
     ).map((message) => {
       if (!isMessageStructComplex) {
