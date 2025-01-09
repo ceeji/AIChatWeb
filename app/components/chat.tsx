@@ -1425,7 +1425,9 @@ function ChatCom(props: {
                 "[Mask] syncing from global, name = ",
                 session.mask.name,
               );
+              // baiyan: max_tokens 如果有值，不能被随意同步
               session.mask.modelConfig = { ...config.modelConfig };
+              chatStore.updateSessionMaxTokens(session.mask.modelConfig);
             } else {
               const selectedModel = availableModels.filter(
                 (m) => m.name === session.mask.modelConfig.model,
@@ -1479,6 +1481,13 @@ function ChatCom(props: {
                   session.mask.modelConfig.avatarEmoji =
                     selectedModel.avatarEmoji;
                 }
+                // baiyan: 更新 max_tokens
+                const oldMaxTokens = session.mask.modelConfig.max_tokens;
+                chatStore.updateSessionMaxTokens(session.mask.modelConfig);
+                if (oldMaxTokens != session.mask.modelConfig.max_tokens) {
+                  same = false;
+                }
+
                 const sameArray = (a: string[], b: string[]) => {
                   if (
                     (a === null || a === undefined) &&
@@ -1534,10 +1543,10 @@ function ChatCom(props: {
                   return false;
                 }
 
-                console.log(
-                  "[Mask] syncing from global, name = ",
-                  session.mask.name,
-                );
+                // console.log(
+                //   "[Mask] syncing from global, name = ",
+                //   session.mask.name,
+                // );
                 // session.mask.modelConfig = { ...config.modelConfig };
               } else {
                 // selectedModel 不存在
