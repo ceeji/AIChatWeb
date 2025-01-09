@@ -93,7 +93,7 @@ export class ChatGPTApi implements LLMApi {
 
     const messages = (
       options.sessionUuid && options.userMessage // 如果是服务器同步会话，那么仅发送最近一条用户的message
-        ? [options.userMessage]
+        ? options.messages // [options.userMessage]
         : options.messages
     ).map((message) => {
       if (!isMessageStructComplex) {
