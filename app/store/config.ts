@@ -71,7 +71,7 @@ export const DEFAULT_CONFIG = {
     frequency_penalty: 0,
     sendMemory: true,
     historyMessageCount: 10,
-    compressMessageLengthThreshold: 14000,
+    compressMessageLengthThreshold: 100000,
     enableInjectSystemPrompts: true,
     template: DEFAULT_INPUT_TEMPLATE,
     pluginUuids: [] as string[],
