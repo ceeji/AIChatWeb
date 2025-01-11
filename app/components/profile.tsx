@@ -221,6 +221,7 @@ export function Profile() {
         </List>
 
         <List>
+          {/* 显示加载中或无套餐信息 */}
           {loading ||
           (profileStore.balances && profileStore.balances.length === 0) ? (
             <div
@@ -239,99 +240,61 @@ export function Profile() {
                   : ""}
             </div>
           ) : (
-            <></>
-          )}
-
-          {profileStore.balances &&
-          profileStore.balances.length > 0 &&
-          !profileStore.balances[0].expired ? (
             <>
-              <ListItem
-                title={Locale.Profile.Tokens.Title}
-                subTitle={
-                  getPrefix(profileStore.balances[0]) +
-                  Locale.Profile.Tokens.SubTitle
-                }
-              >
-                <span>
-                  {profileStore.balances[0].tokens == -1
-                    ? "无限"
-                    : profileStore.balances[0].tokens}
-                </span>
-              </ListItem>
+              {/* 筛选未过期且 tokens > 0 的套餐 */}
+              {profileStore.balances
+                .filter((balance) => !balance.expired && balance.tokens > 0) // 过滤未过期且 tokens > 0 的套餐
+                .sort((a, b) => b.tokens - a.tokens) // 按 tokens 降序排序
+                .map((balance, index) => (
+                  <ListItem key={index}>
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        width: "100%",
+                      }}
+                    >
+                      <span>
+                        算力积分:{" "}
+                        {balance.tokens === -1 ? "无限" : balance.tokens}
+                      </span>
+                      <span>过期时间: {balance.expireTime}</span>
+                    </div>
+                  </ListItem>
+                ))}
 
-              <ListItem
-                title={Locale.Profile.ChatCount.Title}
-                subTitle={
-                  getPrefix(profileStore.balances[0]) +
-                  Locale.Profile.ChatCount.SubTitle
-                }
-              >
-                <span>
-                  {profileStore.balances[0].chatCount == -1
-                    ? "无限"
-                    : profileStore.balances[0].chatCount}
-                </span>
-              </ListItem>
-
-              <ListItem
-                title={Locale.Profile.AdvanceChatCount.Title}
-                subTitle={
-                  getPrefix(profileStore.balances[0]) +
-                  Locale.Profile.AdvanceChatCount.SubTitle
-                }
-              >
-                <span>
-                  {profileStore.balances[0].advancedChatCount == -1
-                    ? "无限"
-                    : profileStore.balances[0].advancedChatCount}
-                </span>
-              </ListItem>
-              <ListItem
-                title={Locale.Profile.DrawCount.Title}
-                subTitle={
-                  getPrefix(profileStore.balances[0]) +
-                  Locale.Profile.DrawCount.SubTitle
-                }
-              >
-                <span>
-                  {profileStore.balances[0].drawCount == -1
-                    ? "无限"
-                    : profileStore.balances[0].drawCount}
-                </span>
-              </ListItem>
-              <ListItem
-                title={Locale.Profile.ExpireList.Title}
-                subTitle={Locale.Profile.ExpireList.SubTitle}
-              >
-                <span>{profileStore.balances[0].expireTime}</span>
-              </ListItem>
+              {/* 如果有已过期的套餐，显示数量 */}
+              {profileStore.balances.filter((balance) => balance.expired)
+                .length > 0 && (
+                <ListItem>
+                  <span>
+                    还有{" "}
+                    {
+                      profileStore.balances.filter((balance) => balance.expired)
+                        .length
+                    }{" "}
+                    个已过期套餐
+                  </span>
+                </ListItem>
+              )}
             </>
-          ) : (
-            <></>
           )}
-          {profileStore.balances && profileStore.balances.length > 0 ? (
-            <ListItem
-              subTitle={
-                profileStore.balances[0].expired
-                  ? "您所购套餐已经全部过期"
-                  : "以上仅展示最早到期的套餐"
-              }
-            >
+
+          {/* 显示 "全部套餐" 按钮，仅当有有效套餐存在 */}
+          {profileStore.balances && profileStore.balances.length > 0 && (
+            <ListItem>
               <IconButton
                 text={Locale.Profile.Actions.All}
                 type="second"
                 style={{ flexShrink: 0 }}
                 onClick={() => {
-                  // showToast(Locale.Profile.Actions.ConsultAdministrator);
                   navigate(Path.Balance);
                 }}
               />
             </ListItem>
-          ) : (
-            <></>
           )}
 
+          {/* 操作按钮：余额日志 和 兑换 */}
           <ListItem>
             <div style={{ display: "flex" }}>
               <IconButton
