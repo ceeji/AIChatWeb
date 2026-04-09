@@ -95,6 +95,14 @@ const cn = {
     DeleteDeletedSessionConfirm: "该会话已在其他客户端删除，确定删除本地会话？",
     ModelNotAvailable: "当前模型已不可用，请更换模型进行会话",
     PleaseWaitForFinished: "请等待本次请求结束",
+    DocumentUpload: {
+      Button: "上传文档",
+      Parsing: "解析中… ",
+      TooLarge: (filename: string, chars: number) =>
+        `"${filename}" 内容过长（约 ${Math.round(chars / 1000)}K 字），是否截断为前 10 万字后继续？`,
+      Truncated: "已截断",
+      ParseError: "文件解析失败，请检查文件格式",
+    },
   },
   Midjourney: {
     Uploading: "上传中……",

@@ -27,7 +27,6 @@
   .window-action-button {
     margin-top: 5px;
   }
-
 }
 
 .window-action-button {
@@ -89,17 +88,101 @@
   }
 }
 
-
-.chat-select-images{
+.chat-select-images {
   margin-bottom: 10px;
-  img{
-    width:80px;
+  img {
+    width: 80px;
     height: 80px;
     margin: 0 5px;
     border-radius: 10px;
-    border:1px dashed var(--color-border-muted);
+    border: 1px dashed var(--color-border-muted);
     object-fit: cover;
   }
+}
+
+// Pending document chips (above input textarea)
+.chat-pending-docs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 6px 10px 2px;
+}
+
+.chat-pending-doc-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--second);
+  border: 1px solid var(--color-border-muted);
+  border-radius: 16px;
+  padding: 2px 8px;
+  font-size: 12px;
+  max-width: 220px;
+  overflow: hidden;
+}
+
+.chat-pending-doc-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 120px;
+  color: var(--black);
+}
+
+.chat-pending-doc-progress {
+  color: var(--primary);
+  white-space: nowrap;
+}
+
+.chat-pending-doc-chars {
+  color: var(--black-50);
+  white-space: nowrap;
+}
+
+.chat-pending-doc-truncated {
+  color: #f90;
+  font-weight: bold;
+}
+
+.chat-pending-doc-remove {
+  cursor: pointer;
+  margin-left: 2px;
+  color: var(--black-50);
+  font-size: 14px;
+  line-height: 1;
+
+  &:hover {
+    color: var(--danger);
+  }
+}
+
+// Attachment chips on sent messages
+.chat-message-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.chat-message-attach-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--second);
+  border: 1px solid var(--color-border-muted);
+  border-radius: 12px;
+  padding: 2px 10px;
+  font-size: 12px;
+  max-width: 240px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.chat-message-attach-truncated {
+  color: #f90;
+  font-size: 11px;
+  margin-left: 2px;
 }
 
 .prompt-toast {
@@ -208,7 +291,7 @@
   left: 0;
   width: 100%;
   height: 100%;
-  background-color: rgba(0,0,0, .65);
+  background-color: rgba(0, 0, 0, 0.65);
   z-index: 1;
   display: flex;
   justify-content: center;
@@ -336,7 +419,8 @@
   }
 }
 
-.chat-message, .chat-message-user {
+.chat-message,
+.chat-message-user {
   display: flex;
   flex-direction: row;
 
@@ -523,14 +607,12 @@
 }
 
 .chat-message-mj-actions {
-
-  &.column-flex{
+  &.column-flex {
     flex-direction: column;
     justify-content: center;
     align-items: end;
   }
 }
-
 
 .chat-message-mj-action-btn {
   font-size: 12px;
@@ -543,7 +625,7 @@
   border-radius: 16px;
 
   animation: slide-in-from-top ease 0.3s;
-  transition: all .3s;
+  transition: all 0.3s;
   cursor: pointer;
   margin: 2px 2px;
 
@@ -555,7 +637,6 @@
   &.vary {
     width: 114px;
   }
-
 }
 
 .chat-message-mj-emoji-btn {

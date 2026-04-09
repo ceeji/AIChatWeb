@@ -102,6 +102,14 @@ const en: LocaleType = {
     ModelNotAvailable:
       "Current model is not available. Please Change the model for chatting",
     PleaseWaitForFinished: "Please wait for the request finished",
+    DocumentUpload: {
+      Button: "Upload Document",
+      Parsing: "Parsing… ",
+      TooLarge: (filename: string, chars: number) =>
+        `"${filename}" is too long (~${Math.round(chars / 1000)}K chars). Truncate to the first 100,000 chars and continue?`,
+      Truncated: "Truncated",
+      ParseError: "Failed to parse the file. Please check the file format.",
+    },
   },
   Midjourney: {
     Uploading: "Uploading",

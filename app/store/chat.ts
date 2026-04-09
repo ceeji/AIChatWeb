@@ -102,6 +102,16 @@ export interface Attr {
   run?: RunEntity;
   runSteps?: RunStepEntity[];
   threadMessages?: ThreadMessageEntity[];
+  documents?: AttachedDocument[];
+  userText?: string;
+}
+
+export interface AttachedDocument {
+  filename: string;
+  sizeBytes: number;
+  mimeType: string;
+  parsedChars: number;
+  truncated: boolean;
 }
 
 export type ChatMessage = RequestMessage & {
@@ -610,6 +620,8 @@ export const useChatStore = createPersistStore(
         token: string,
         navigateToLogin: () => void,
         onFinish: () => void,
+        documents?: AttachedDocument[],
+        userText?: string,
       ) {
         // const session = get().currentSession();
         const modelConfig = session.mask.modelConfig;
@@ -640,6 +652,10 @@ export const useChatStore = createPersistStore(
         userMessage.attr.baseImages = baseImages;
         userMessage.attr.assistantUuid = session.assistant?.uuid;
         userMessage.attr.assistantName = session.assistant?.name;
+        if (documents && documents.length > 0) {
+          userMessage.attr.documents = documents;
+          userMessage.attr.userText = userText ?? content;
+        }
 
         const botMessage: ChatMessage = createMessage({
           role: "assistant",

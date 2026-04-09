@@ -122,6 +122,13 @@ import { ExportMessageModal } from "./exporter";
 import { getClientConfig } from "../config/client";
 import { useWebsiteConfigStore } from "../store";
 import { nanoid } from "nanoid";
+import {
+  parseDocument,
+  formatDocumentBlock,
+  MAX_PARSED_CHARS,
+  type ParseProgress,
+} from "../utils/document-parser";
+import { AttachedDocument } from "../store/chat";
 
 const Markdown = dynamic(async () => (await import("./markdown")).Markdown, {
   loading: () => <LoadingIcon />,
@@ -612,6 +619,7 @@ export function ChatActions(props: {
   uploading: boolean;
   setUploading: React.Dispatch<React.SetStateAction<boolean>>;
   assistant?: AiAssistant;
+  onDocumentFileSelected: (file: File) => void;
 }) {
   const config = useAppConfig();
   const navigate = useNavigate();
@@ -940,6 +948,31 @@ export function ChatActions(props: {
           />
         )}
       </>
+
+      {props.contentType !== "Image" && (
+        <div
+          className={`${styles["chat-input-action"]} clickable`}
+          title={Locale.Chat.DocumentUpload.Button}
+          onClick={() => {
+            document.getElementById("chat-doc-file-select-upload")?.click();
+          }}
+        >
+          <input
+            type="file"
+            id="chat-doc-file-select-upload"
+            accept=".md,.markdown,.txt,.pdf,.docx,.pptx"
+            multiple
+            style={{ display: "none" }}
+            onChange={(e) => {
+              const files = e.target.files;
+              if (!files) return;
+              Array.from(files).forEach((f) => props.onDocumentFileSelected(f));
+              e.target.value = "";
+            }}
+          />
+          <UploadIcon />
+        </div>
+      )}
     </div>
   );
 }
@@ -1066,6 +1099,18 @@ function RefreshDrawStatus(props: {
 
 type RenderMessage = ChatMessage & { preview?: boolean };
 
+interface PendingDocument {
+  id: string;
+  filename: string;
+  sizeBytes: number;
+  mimeType: string;
+  parsedContent: string;
+  parsedChars: number;
+  truncated: boolean;
+  parsing: boolean;
+  progress: number; // 0–1
+}
+
 function ChatCom(props: {
   setRequestingSession: Dispatch<SetStateAction<ChatSession | null>>;
 }) {
@@ -1079,6 +1124,7 @@ function ChatCom(props: {
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const [userInput, setUserInput] = useState("");
   const [useImages, setUseImages] = useState<BaseImageItem[]>([]);
+  const [pendingDocs, setPendingDocs] = useState<PendingDocument[]>([]);
   const [mjImageMode, setMjImageMode] = useState<ImageMode>(""); // 垫图IMAGINE，混图BLEND，识图DESCRIBE
   const [isLoading, setIsLoading] = useState(false);
   const { submitKey, shouldSubmit } = useSubmitHandler();
@@ -1250,7 +1296,8 @@ function ChatCom(props: {
       }
       // setUserInput(userInput = (mjImageMode + "::" + userInput));
     } else {
-      if (userInput.trim() === "") return;
+      const hasDocs = pendingDocs.some((d) => !d.parsing);
+      if (userInput.trim() === "" && !hasDocs) return;
     }
     const matchCommand = chatCommands.match(userInput);
     if (matchCommand.matched) {
@@ -1261,12 +1308,35 @@ function ChatCom(props: {
       matchCommand.invoke();
       return;
     }
+
+    // Build final content: user text + document blocks
+    const readyDocs = pendingDocs.filter((d) => !d.parsing);
+    let finalContent = userInput;
+    const docsMeta: AttachedDocument[] = [];
+    if (readyDocs.length > 0) {
+      const docBlocks = readyDocs
+        .map((d) =>
+          formatDocumentBlock(d.filename, d.parsedContent, d.truncated),
+        )
+        .join("\n\n---\n\n");
+      finalContent = userInput ? `${userInput}\n\n${docBlocks}` : docBlocks;
+      readyDocs.forEach((d) =>
+        docsMeta.push({
+          filename: d.filename,
+          sizeBytes: d.sizeBytes,
+          mimeType: d.mimeType,
+          parsedChars: d.parsedChars,
+          truncated: d.truncated,
+        }),
+      );
+    }
+
     setIsLoading(true);
     props.setRequestingSession(session);
     chatStore
       .onUserInput(
         session,
-        userInput,
+        finalContent,
         pluignModels,
         mjImageMode,
         useImages,
@@ -1280,6 +1350,8 @@ function ChatCom(props: {
           navigate(Path.Login);
         },
         () => props.setRequestingSession(null),
+        docsMeta.length > 0 ? docsMeta : undefined,
+        docsMeta.length > 0 ? userInput : undefined,
       )
       .then((result) => {
         setIsLoading(false);
@@ -1293,6 +1365,7 @@ function ChatCom(props: {
     localStorage.setItem(LAST_INPUT_KEY, userInput);
     setUseImages([]);
     setMjImageMode("");
+    setPendingDocs([]);
     setUserInput("");
     setPromptHints([]);
     if (!isMobileScreen) inputRef.current?.focus();
@@ -1324,6 +1397,58 @@ function ChatCom(props: {
     setUseImages([...useImages, img]);
     if (!mjImageMode) {
       setMjImageMode("IMAGINE");
+    }
+  };
+
+  const onDocumentFileSelected = async (file: File) => {
+    const id = nanoid();
+    const placeholderDoc: PendingDocument = {
+      id,
+      filename: file.name,
+      sizeBytes: file.size,
+      mimeType: file.type,
+      parsedContent: "",
+      parsedChars: 0,
+      truncated: false,
+      parsing: true,
+      progress: 0,
+    };
+    setPendingDocs((prev) => [...prev, placeholderDoc]);
+
+    try {
+      const result = await parseDocument(file, (p: ParseProgress) => {
+        setPendingDocs((prev) =>
+          prev.map((d) => (d.id === id ? { ...d, progress: p.ratio } : d)),
+        );
+      });
+
+      if (result.truncated) {
+        const ok = await showConfirm(
+          Locale.Chat.DocumentUpload.TooLarge(file.name, result.parsedChars),
+        );
+        if (!ok) {
+          setPendingDocs((prev) => prev.filter((d) => d.id !== id));
+          return;
+        }
+      }
+
+      setPendingDocs((prev) =>
+        prev.map((d) =>
+          d.id === id
+            ? {
+                ...d,
+                parsedContent: result.content,
+                parsedChars: result.parsedChars,
+                truncated: result.truncated,
+                parsing: false,
+                progress: 1,
+              }
+            : d,
+        ),
+      );
+    } catch (e) {
+      showToast(Locale.Chat.DocumentUpload.ParseError);
+      setPendingDocs((prev) => prev.filter((d) => d.id !== id));
     }
   };
 
@@ -2378,7 +2503,11 @@ function ChatCom(props: {
                   <div className={styles["chat-message-item"]}>
                     {(!isUser || (message.content ?? "").length > 0) && (
                       <Markdown
-                        content={message.content}
+                        content={
+                          isUser && message.attr?.documents?.length
+                            ? (message.attr.userText ?? "")
+                            : message.content
+                        }
                         loading={
                           (message.preview ||
                             (message.content ?? "").length === 0) &&
@@ -2394,6 +2523,33 @@ function ChatCom(props: {
                         defaultShow={i >= messages.length - 6}
                       />
                     )}
+                    {isUser &&
+                      message.attr?.documents &&
+                      message.attr.documents.length > 0 && (
+                        <div className={styles["chat-message-attachments"]}>
+                          {message.attr.documents.map(
+                            (doc: AttachedDocument, idx: number) => (
+                              <div
+                                key={idx}
+                                className={styles["chat-message-attach-chip"]}
+                                title={`${(doc.parsedChars / 1000).toFixed(1)}K 字符${doc.truncated ? "（已截断）" : ""}`}
+                              >
+                                <span>📎</span>
+                                <span>{doc.filename}</span>
+                                {doc.truncated && (
+                                  <span
+                                    className={
+                                      styles["chat-message-attach-truncated"]
+                                    }
+                                  >
+                                    {Locale.Chat.DocumentUpload.Truncated}
+                                  </span>
+                                )}
+                              </div>
+                            ),
+                          )}
+                        </div>
+                      )}
                     {isUser && message.attr?.imageMode && (
                       <div>
                         <div
@@ -2748,6 +2904,7 @@ function ChatCom(props: {
             return ok;
           }}
           assistant={session.assistant}
+          onDocumentFileSelected={onDocumentFileSelected}
         />
         {useImages.length > 0 && (
           <div className={styles["chat-select-images"]}>
@@ -2796,6 +2953,43 @@ function ChatCom(props: {
                 </div>
               </>
             )}
+          </div>
+        )}
+        {pendingDocs.length > 0 && (
+          <div className={styles["chat-pending-docs"]}>
+            {pendingDocs.map((doc) => (
+              <div key={doc.id} className={styles["chat-pending-doc-chip"]}>
+                <span className={styles["chat-pending-doc-name"]}>
+                  {doc.filename}
+                </span>
+                {doc.parsing ? (
+                  <span className={styles["chat-pending-doc-progress"]}>
+                    {Locale.Chat.DocumentUpload.Parsing}
+                    {Math.round(doc.progress * 100)}%
+                  </span>
+                ) : (
+                  <span className={styles["chat-pending-doc-chars"]}>
+                    {(doc.parsedChars / 1000).toFixed(1)}K
+                    {doc.truncated && (
+                      <span className={styles["chat-pending-doc-truncated"]}>
+                        {" "}
+                        {Locale.Chat.DocumentUpload.Truncated}
+                      </span>
+                    )}
+                  </span>
+                )}
+                <span
+                  className={styles["chat-pending-doc-remove"]}
+                  onClick={() =>
+                    setPendingDocs((prev) =>
+                      prev.filter((d) => d.id !== doc.id),
+                    )
+                  }
+                >
+                  ×
+                </span>
+              </div>
+            ))}
           </div>
         )}
         <div className={styles["chat-input-panel-inner"]}>
