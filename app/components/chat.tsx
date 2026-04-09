@@ -50,6 +50,7 @@ import PanRightIcon from "../icons/pan-right.svg";
 import PanUpIcon from "../icons/pan-up.svg";
 import PanDownIcon from "../icons/pan-down.svg";
 import UploadIcon from "../icons/upload.svg";
+import PaperclipIcon from "../icons/paperclip.svg";
 import CheckmarkIcon from "../icons/checkmark.svg";
 
 import {
@@ -950,13 +951,7 @@ export function ChatActions(props: {
       </>
 
       {props.contentType !== "Image" && (
-        <div
-          className={`${styles["chat-input-action"]} clickable`}
-          title={Locale.Chat.DocumentUpload.Button}
-          onClick={() => {
-            document.getElementById("chat-doc-file-select-upload")?.click();
-          }}
-        >
+        <>
           <input
             type="file"
             id="chat-doc-file-select-upload"
@@ -970,8 +965,14 @@ export function ChatActions(props: {
               e.target.value = "";
             }}
           />
-          <UploadIcon />
-        </div>
+          <ChatAction
+            text={Locale.Chat.DocumentUpload.Button}
+            icon={<PaperclipIcon />}
+            onClick={() => {
+              document.getElementById("chat-doc-file-select-upload")?.click();
+            }}
+          />
+        </>
       )}
     </div>
   );
