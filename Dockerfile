@@ -1,3 +1,5 @@
+# syntax=docker/dockerfile:1
+
 # 先打开 brook http 代理
 # ~/bk socks5tohttp -s 127.0.0.1:1080 -l 0.0.0.0:8011 &
 
@@ -13,7 +15,9 @@ WORKDIR /app
 
 COPY package.json package-lock.json ./
 
-RUN npm config set registry https://registry.npmmirror.com/ && \
+# 缓存 npm 下载内容，package.json 未变时跳过网络请求
+RUN --mount=type=cache,target=/root/.npm \
+    npm config set registry https://registry.npmmirror.com/ && \
     npm ci
 
 COPY . .
@@ -23,7 +27,9 @@ RUN cp -n node_modules/pdfjs-dist/build/pdf.worker.min.mjs public/pdf.worker.min
     chmod +x /app/node_modules/.bin/next && \
     chmod +x /app/node_modules/.bin/cross-env
 
-RUN npm run build
+# 缓存 Next.js webpack 编译产物，只重编译有变化的模块
+RUN --mount=type=cache,target=/app/.next/cache \
+    npm run build
 
 # 构建最终容器
 FROM m.daocloud.io/docker.io/library/node:18-alpine
