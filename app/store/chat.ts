@@ -863,7 +863,7 @@ export const useChatStore = createPersistStore(
                   nextBotMessage.streaming = true;
                   if (msg) {
                     // 循环迭代中同样过滤 tool_call 标签，只显示前置说明文字
-                    nextBotMessage.content = getDisplayContent(msg);
+                    nextBotMessage.content = getDisplayContent(msg, true);
                   }
                   get().updateLocalCurrentSession((s) => {
                     s.messages = s.messages.concat();
@@ -952,8 +952,8 @@ export const useChatStore = createPersistStore(
               if (isAgentMode) {
                 // 保留原始内容供 onFinish 检测工具调用
                 _rawAgentContent = message;
-                // UI 只显示 <tool_call> 之前的内容
-                botMessage.content = getDisplayContent(message);
+                // UI 只显示 <tool_call> 之前的内容（流式中途，开启前缀检测）
+                botMessage.content = getDisplayContent(message, true);
               } else {
                 botMessage.content = message;
               }

@@ -128,25 +128,38 @@ export function removeToolCallTags(text: string): string {
 }
 
 /**
- * 截取 streaming 文本中用于 UI 显示的部分：
- * - 若尚未出现 <tool_call>，返回原文本
- * - 若已出现 <tool_call> 开始标签（即使未闭合），只保留其之前的文本
- * 这样 streaming 过程中工具调用内容不会暴露给用户。
+ * 截取文本中用于 UI 显示的部分，过滤掉 <tool_call> 标签及其内容。
+ *
+ * @param text      原始文本（onUpdate 传入的累积流 / onFinish 传入的完整文本）
+ * @param streaming 是否处于流式传输中途（animateResponseText 正在逐字符输出）
+ *
+ * 行为：
+ * - 完整的 <tool_call>{ 序列出现时，截断其及后续所有内容（精准匹配，不误伤普通 XML 标签）
+ * - streaming=true 时，额外检测尾部尚未闭合的 <tool_call> 前缀：
+ *   采用"最短可区分前缀"策略——只有在累积文本末尾出现了足以唯一确认是 <tool_call>
+ *   开头的字符串（即 "<tool_call" 及其各级前缀）时才截断，普通 XML 标签（如
+ *   <thinking>、<br>）在第一个与 <tool_call> 不同的字符出现后立刻恢复显示，
+ *   不会被永久隐藏。
  */
-export function getDisplayContent(streamingText: string): string {
-  // 1. 完整标签：找到 <tool_call> 直接截断
-  const idx = streamingText.indexOf("<tool_call>");
-  if (idx !== -1) return streamingText.slice(0, idx).trimEnd();
+export function getDisplayContent(text: string, streaming = false): string {
+  // 1. 完整标签（后跟可选空白和 {，确认是 JSON 工具调用而非普通 XML 标签）
+  const FULL_RE = /<tool_call>\s*\{/;
+  const fullMatch = FULL_RE.exec(text);
+  if (fullMatch) return text.slice(0, fullMatch.index).trimEnd();
 
-  // 2. 部分标签：逐字符动画时尾部可能出现 "<", "<t", "<to" 等前缀，也需要隐藏，
-  //    避免 streaming 过程中短暂暴露 XML 片段给用户。
-  const tag = "<tool_call>";
-  for (let len = tag.length - 1; len >= 1; len--) {
-    if (streamingText.endsWith(tag.slice(0, len))) {
-      return streamingText.slice(0, streamingText.length - len).trimEnd();
+  // 2. streaming 中途：检测尾部不完整前缀，防止字符动画逐字母暴露
+  //    只截断 "<tool_call>" 各级前缀（即 "<", "<t", …, "<tool_call"）。
+  //    一旦出现非前缀字符（如 "<th"、"<tool_r"），前缀不再匹配，内容立刻恢复。
+  if (streaming) {
+    const prefix = "<tool_call>";
+    for (let len = prefix.length - 1; len >= 1; len--) {
+      if (text.endsWith(prefix.slice(0, len))) {
+        return text.slice(0, text.length - len).trimEnd();
+      }
     }
   }
-  return streamingText;
+
+  return text;
 }
 
 // ────────────────────────────────────────────────────────────
