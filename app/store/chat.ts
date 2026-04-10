@@ -853,7 +853,12 @@ export const useChatStore = createPersistStore(
           await new Promise<void>((iterResolve) => {
             api.llm
               .chat({
-                sessionUuid: session.uuid,
+                // 迭代轮次不传 sessionUuid：
+                // 服务端收到 sessionUuid 后会对 messages 数组里的所有消息执行 INSERT，
+                // 而 userMessage/botMessage 在首轮 fetchServerMessageId 时已经 INSERT，
+                // 重复 INSERT 会触发唯一索引冲突（code:10300 duplicate entry）。
+                // 不传 sessionUuid 则服务端只做推理，不触发消息持久化。
+                sessionUuid: undefined,
                 messages: nextRecentMessages,
                 userMessage: toolResultMessage,
                 botMessage: nextBotMessage,
