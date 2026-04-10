@@ -772,11 +772,14 @@ export const useChatStore = createPersistStore(
           const toolCalls = detectAllToolCalls(rawMessage);
           if (toolCalls.length === 0 || iteration >= MAX_AGENT_ITERATIONS) {
             // ── 迭代结束（无更多工具调用 或 达到最大轮次）──
-            // 1. 保存所有迭代产生的新消息（无 uuid 的）到服务端
+            // 1. 保存所有迭代产生的新消息（无 uuid 的）到服务端。
+            //    使用 await 确保 UUID 赋值完成后 runAgentIteration 才 return，
+            //    这样 .finally() → onFinish() 解锁界面时，所有消息已有 UUID，
+            //    用户下一条消息的 noUuidMessageIds 不会再包含这批消息 → 避免重复 INSERT。
             if (session.uuid) {
               const unsaved = session.messages.filter((m) => !m.uuid);
               if (unsaved.length > 0) {
-                get().fetchServerMessageId(session, unsaved, token);
+                await get().fetchServerMessageId(session, unsaved, token);
               }
             }
             // 2. 自动将 todowrite 面板中仍处于 pending/in-progress 的步骤标记为 done，
@@ -1103,24 +1106,13 @@ export const useChatStore = createPersistStore(
                 // UI 只保留 tool_call 之前的说明文字，避免 XML 暴露给用户
                 botMessage.content = getDisplayContent(fullMessage);
                 botMessage.attr.isToolLoop = true;
-                // 先触发 onNewMessage（保存对话记录），内容用过滤后版本
-                get().onNewMessage(
-                  websiteConfigStore,
-                  botMessage,
-                  token,
-                  navigateToLogin,
-                );
-                if (session.uuid) {
-                  get().fetchServerMessageId(
-                    session,
-                    [userMessage, botMessage],
-                    token,
-                  );
-                }
                 get().updateLocalCurrentSession((s) => {
                   s.messages = s.messages.concat();
                 });
-                // 异步执行工具循环，不阻塞 onFinish 回调
+                // 注意：此处故意不提前调用 fetchServerMessageId([userMessage, botMessage])。
+                // 若提前保存，循环退出点的 fetchServerMessageId(unsaved) 也会包含同样的消息
+                // （UUID 在异步响应返回前仍为空），导致重复 INSERT → 唯一索引冲突。
+                // 所有消息统一在循环退出点一次性保存（已 await 保证 UUID 赋值完成后才解锁界面）。
                 runAgentIteration(botMessage, fullMessage, 0).finally(() => {
                   // agent 循环完成后：持久化 & UI 通知
                   get().onNewMessage(
