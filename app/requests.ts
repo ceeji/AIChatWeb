@@ -21,6 +21,13 @@ export interface RegisterResult {
   data?: any;
 }
 
+const CONCURRENT_RETRY_MAX = 5;
+const CONCURRENT_RETRY_DELAY_MS = 1200;
+
+function isConcurrentError(message: string): boolean {
+  return message.toLowerCase().includes("concurrent");
+}
+
 export async function request(
   url: string,
   method: string,
@@ -35,47 +42,77 @@ export async function request(
     console.log("BASE_URL", BASE_URL);
     // console.log('mode', mode)
     let requestUrl = (mode === "export" ? BASE_URL : "") + "/api" + url;
-    const res = await fetch(requestUrl, {
-      method: method,
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: body === null ? null : JSON.stringify(body),
-      // // @ts-ignore
-      // duplex: "half",
-    });
-    if (res.status == 200) {
-      let json: Response<any>;
-      try {
-        json = (await res.json()) as Response<any>;
-      } catch (e) {
-        console.error("json formatting failure", e);
-        options?.onError({
-          name: "json formatting failure",
-          message: "json formatting failure",
-        });
-        return {
-          code: -1,
-          message: "json formatting failure",
-        };
+
+    let lastJson: Response<any> | null = null;
+    for (let attempt = 0; attempt <= CONCURRENT_RETRY_MAX; attempt++) {
+      const res = await fetch(requestUrl, {
+        method: method,
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: body === null ? null : JSON.stringify(body),
+        // // @ts-ignore
+        // duplex: "half",
+      });
+
+      if (res.status == 200) {
+        let json: Response<any>;
+        try {
+          json = (await res.json()) as Response<any>;
+        } catch (e) {
+          console.error("json formatting failure", e);
+          options?.onError({
+            name: "json formatting failure",
+            message: "json formatting failure",
+          });
+          return {
+            code: -1,
+            message: "json formatting failure",
+          };
+        }
+
+        if (json.code != 0 && isConcurrentError(json.message)) {
+          lastJson = json;
+          if (attempt < CONCURRENT_RETRY_MAX) {
+            console.warn(
+              `[request] concurrent error, retrying (${attempt + 1}/${CONCURRENT_RETRY_MAX})...`,
+            );
+            await new Promise((resolve) =>
+              setTimeout(
+                resolve,
+                CONCURRENT_RETRY_DELAY_MS * (attempt * 2 + 1),
+              ),
+            );
+            continue;
+          }
+        }
+
+        if (json.code != 0) {
+          options?.onError({
+            name: json.message,
+            message: json.message,
+          });
+        }
+        return json;
       }
-      if (json.code != 0) {
-        options?.onError({
-          name: json.message,
-          message: json.message,
-        });
-      }
-      return json;
+
+      console.error("register result error(1)", res);
+      options?.onError({
+        name: "unknown error(1)",
+        message: "unknown error(1)",
+      });
+      return {
+        code: -1,
+        message: "unknown error(2)",
+      };
     }
-    console.error("register result error(1)", res);
+
+    // all retries exhausted for concurrent error
     options?.onError({
-      name: "unknown error(1)",
-      message: "unknown error(1)",
+      name: lastJson!.message,
+      message: lastJson!.message,
     });
-    return {
-      code: -1,
-      message: "unknown error(2)",
-    };
+    return lastJson!;
   } catch (err) {
     console.error("NetWork Error(3)", err);
     options?.onError(err as Error);

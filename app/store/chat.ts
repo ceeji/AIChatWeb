@@ -1005,7 +1005,10 @@ export const useChatStore = createPersistStore(
         // 智能体模式下，保存完整原始流内容用于 onFinish 检测工具调用
         let _rawAgentContent = "";
         return api.llm.chat({
-          sessionUuid: session.uuid, // 携带上session uuid，系统才会云同步
+          // 智能体模式不传 sessionUuid：服务端收到 sessionUuid 后会对 messages 数组
+          // 里的所有消息执行 INSERT，而 agentMode 下 messages 包含完整上下文（含上一轮
+          // 已持久化的历史消息），会触发唯一索引冲突。消息持久化统一由 fetchServerMessageId 负责。
+          sessionUuid: isAgentMode ? undefined : session.uuid,
           messages: sendMessages,
           userMessage: userMessage,
           botMessage: botMessage,
