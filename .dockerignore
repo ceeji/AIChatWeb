@@ -13,9 +13,15 @@ out
 # Tauri native app build
 src-tauri/target
 
-# Docs and scripts (not needed in image)
+# Docs (not needed in image)
 docs
-scripts
+
+# Shell scripts not needed in image (but wxLogin.js is imported by source code, keep scripts/)
+scripts/*.sh
+scripts/*.conf
+scripts/*.output
+scripts/fetch-prompts.mjs
+scripts/baiyan-ai
 
 # Misc
 *.md
