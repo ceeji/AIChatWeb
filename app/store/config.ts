@@ -78,6 +78,7 @@ export const DEFAULT_CONFIG = {
     processModes: [] as SPEED_MAP_KEY[],
     processMode: null as SPEED_MAP_KEY | null,
     drawActions: [] as DrawAction[],
+    agentMode: false as boolean,
   },
 };
 

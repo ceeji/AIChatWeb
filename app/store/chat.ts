@@ -19,6 +19,15 @@ import {
 import { api, ChatSubmitResult, RequestMessage } from "../client/api";
 import { ChatControllerPool } from "../client/controller";
 import { prettyObject } from "../utils/format";
+import {
+  buildToolSystemPrompt,
+  detectAllToolCalls,
+  hasToolCalls,
+  executeToolsParallel,
+  formatToolResults,
+  removeToolCallTags,
+} from "../utils/tool-calling";
+import { getAllTools } from "../tools/index";
 import { estimateTokenLength } from "../utils/token";
 import { nanoid } from "nanoid";
 import { createPersistStore } from "../utils/store";
@@ -104,6 +113,10 @@ export interface Attr {
   threadMessages?: ThreadMessageEntity[];
   documents?: AttachedDocument[];
   userText?: string;
+  /** 智能体模式中间步骤消息，UI 不渲染 */
+  agentHidden?: boolean;
+  /** 工具调用循环中正在执行工具 */
+  isToolLoop?: boolean;
 }
 
 export interface AttachedDocument {
@@ -673,6 +686,16 @@ export const useChatStore = createPersistStore(
           "userMessage",
           userMessage,
         );
+        // 智能体模式：注入工具调用 system prompt
+        const agentTools = getAllTools();
+        if (modelConfig.agentMode && agentTools.length > 0) {
+          const toolSystemMsg = createMessage({
+            role: "system",
+            content: buildToolSystemPrompt(agentTools),
+          });
+          recentMessages.unshift(toolSystemMsg);
+        }
+
         const sendMessages = recentMessages.concat(userMessage);
         console.log("[onUserInput] sendMessages", sendMessages);
         const messageIndex = get().currentSession().messages.length + 1;
@@ -716,6 +739,148 @@ export const useChatStore = createPersistStore(
               });
           });
           return responseText;
+        };
+
+        /**
+         * 智能体工具调用循环：
+         * 检测 AI 响应中的工具调用 → 并行执行 → 将结果注入上下文 → 再次请求
+         * 最多执行 MAX_AGENT_ITERATIONS 轮
+         */
+        const MAX_AGENT_ITERATIONS = 15;
+
+        const runAgentIteration = async (
+          currentBotMsg: ChatMessage,
+          rawMessage: string,
+          iteration: number,
+        ): Promise<void> => {
+          const toolCalls = detectAllToolCalls(rawMessage);
+          if (toolCalls.length === 0 || iteration >= MAX_AGENT_ITERATIONS) {
+            return;
+          }
+
+          console.log(
+            `[AgentMode] iteration ${iteration}, detected ${toolCalls.length} tool call(s):`,
+            toolCalls.map((c) => c.name),
+          );
+
+          // 1. 把包含工具调用的 bot 消息标记为隐藏
+          currentBotMsg.attr.agentHidden = true;
+          currentBotMsg.attr.isToolLoop = true;
+          get().updateLocalCurrentSession((s) => {
+            s.messages = s.messages.concat();
+          });
+
+          // 2. 并行执行所有工具
+          let toolResults;
+          try {
+            toolResults = await executeToolsParallel(toolCalls);
+          } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : String(e);
+            console.error("[AgentMode] executeToolsParallel failed:", e);
+            toolResults = toolCalls.map((c) => ({
+              name: c.name,
+              result: `工具执行异常：${msg}`,
+              isError: true,
+            }));
+          }
+
+          // 3. 构造工具结果消息（role=user，隐藏）
+          const toolResultContent = formatToolResults(toolResults);
+          const toolResultMessage = createMessage({
+            role: "user",
+            content: toolResultContent,
+          });
+          toolResultMessage.attr.agentHidden = true;
+
+          // 4. 创建下一个 bot 消息（暂时空，将由流式填充）
+          const nextBotMessage = createMessage({
+            role: "assistant",
+            streaming: true,
+            model: modelConfig.model,
+            toolMessages: [] as ChatToolMessage[],
+          });
+          nextBotMessage.attr.contentType =
+            session.mask?.modelConfig?.contentType;
+          nextBotMessage.attr.isToolLoop = true;
+
+          // 5. 将两条消息追加到 session
+          get().updateLocalCurrentSession((s) => {
+            s.messages = s.messages.concat([toolResultMessage, nextBotMessage]);
+          });
+
+          // 6. 重新构建完整对话上下文（含新加的隐藏消息）
+          const nextRecentMessages =
+            get().getMessagesWithMemory(websiteConfigStore);
+          if (modelConfig.agentMode && getAllTools().length > 0) {
+            const toolSystemMsg = createMessage({
+              role: "system",
+              content: buildToolSystemPrompt(getAllTools()),
+            });
+            nextRecentMessages.unshift(toolSystemMsg);
+          }
+
+          // 7. 再次调用 LLM（不携带 plugins，agent 循环内部不走 langchain）
+          await api.llm.chat({
+            sessionUuid: session.uuid,
+            messages: nextRecentMessages,
+            userMessage: toolResultMessage,
+            botMessage: nextBotMessage,
+            content: toolResultContent,
+            config: { ...modelConfig, stream: true },
+            plugins: [],
+            mask,
+            resend: false,
+            imageMode: "" as ImageMode,
+            baseImages: [],
+            assistantUuid: undefined,
+            threadUuid: undefined,
+            onUpdate(msg) {
+              nextBotMessage.streaming = true;
+              if (msg) nextBotMessage.content = msg;
+              get().updateLocalCurrentSession((s) => {
+                s.messages = s.messages.concat();
+              });
+            },
+            onToolUpdate() {},
+            onCreateRun() {},
+            onUpdateRun() {},
+            onUpdateRunStep() {},
+            onUpdateMessages() {},
+            async onFinish(nextMessage) {
+              nextBotMessage.streaming = false;
+              if (nextMessage) {
+                nextBotMessage.content = nextMessage;
+                get().updateLocalCurrentSession((s) => {
+                  s.messages = s.messages.concat();
+                });
+                // 递归：继续检测工具调用
+                await runAgentIteration(
+                  nextBotMessage,
+                  nextMessage,
+                  iteration + 1,
+                );
+              }
+              ChatControllerPool.remove(session.id, nextBotMessage.id);
+            },
+            onError(error) {
+              const isAborted = error.message.includes("aborted");
+              nextBotMessage.content +=
+                "\n\n[工具调用出错: " + error.message + "]";
+              nextBotMessage.streaming = false;
+              nextBotMessage.isError = !isAborted;
+              get().updateLocalCurrentSession((s) => {
+                s.messages = s.messages.concat();
+              });
+              ChatControllerPool.remove(session.id, nextBotMessage.id);
+            },
+            onController(controller) {
+              ChatControllerPool.addController(
+                session.id,
+                nextBotMessage.id,
+                controller,
+              );
+            },
+          });
         };
 
         // make request
@@ -850,6 +1015,21 @@ export const useChatStore = createPersistStore(
                   [userMessage, botMessage],
                   token,
                 );
+              }
+
+              // 智能体模式：检测工具调用，若有则启动迭代循环
+              if (modelConfig.agentMode && hasToolCalls(message)) {
+                botMessage.attr.isToolLoop = true;
+                get().updateLocalCurrentSession((s) => {
+                  s.messages = s.messages.concat();
+                });
+                // 异步执行工具循环，不阻塞 onFinish 回调
+                runAgentIteration(botMessage, message, 0).finally(() => {
+                  onFinish();
+                  ChatControllerPool.remove(session.id, botMessage.id);
+                  if (logout) navigateToLogin();
+                });
+                return; // 提前返回，等待 agent 循环完成后再 onFinish
               }
             }
             onFinish();

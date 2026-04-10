@@ -1,7 +1,6 @@
-version: '3'
+version: "3"
 
 services:
-
   admin:
     image: harbor.nanjiren.online:8099/aichat/aichat-admin:latest
     container_name: aichat-admin
@@ -53,6 +52,7 @@ services:
       BASE_URL: http://aichat-admin:8080
       TZ: Asia/Shanghai
       SECRET: aichatwebsecret
+      EXA_API_KEY: 0ccac062-1d16-432b-b91f-873f640ce937
 
   console:
     image: nanjiren01/aichat-console:pro-latest

@@ -23,6 +23,7 @@
     "@vercel/analytics": "^0.1.11",
     "axios": "^1.4.0",
     "cheerio": "^1.0.0-rc.12",
+    "docx": "^9.6.1",
     "duck-duck-scrape": "^2.2.4",
     "emoji-picker-react": "^4.5.1",
     "fuse.js": "^6.6.2",
@@ -52,8 +53,8 @@
     "zustand": "^4.3.8"
   },
   "devDependencies": {
-    "@tauri-apps/cli": "^2.0",
     "@tauri-apps/api": "^2",
+    "@tauri-apps/cli": "^2.0",
     "@tauri-apps/plugin-clipboard-manager": "^2",
     "@tauri-apps/plugin-dialog": "^2",
     "@tauri-apps/plugin-fs": "^2",

@@ -130,6 +130,7 @@ import {
   type ParseProgress,
 } from "../utils/document-parser";
 import { AttachedDocument } from "../store/chat";
+import { isAgentModeSupported } from "../tools/index";
 
 const Markdown = dynamic(async () => (await import("./markdown")).Markdown, {
   loading: () => <LoadingIcon />,
@@ -621,6 +622,9 @@ export function ChatActions(props: {
   setUploading: React.Dispatch<React.SetStateAction<boolean>>;
   assistant?: AiAssistant;
   onDocumentFileSelected: (file: File) => void;
+  agentMode: boolean;
+  onToggleAgentMode: () => void;
+  agentModeSupported: boolean;
 }) {
   const config = useAppConfig();
   const navigate = useNavigate();
@@ -928,6 +932,16 @@ export function ChatActions(props: {
             );
           })}
       </>
+
+      {props.agentModeSupported && !props.assistant && (
+        <SwitchChatAction
+          alwaysShowText={true}
+          text="智能体模式"
+          icon={<RobotIcon />}
+          value={props.agentMode}
+          onClick={props.onToggleAgentMode}
+        />
+      )}
 
       <>
         {props.processModes?.length > 0 && (
@@ -1739,6 +1753,31 @@ function ChatCom(props: {
     setPluginModels(models);
   }, []);
 
+  // 智能体模式
+  const agentModeSupported = isAgentModeSupported(
+    session.mask.modelConfig.model,
+    session.mask.modelConfig.contentType,
+    mjImageMode,
+  );
+  const agentMode = agentModeSupported
+    ? (session.mask.modelConfig.agentMode ?? false)
+    : false;
+
+  const toggleAgentMode = async () => {
+    await chatStore.updateCurrentSessionMaskByUpdater(
+      (mask) => {
+        mask.modelConfig.agentMode = !mask.modelConfig.agentMode;
+        mask.syncGlobalConfig = false;
+        return true;
+      },
+      authStore.token,
+      () => {
+        authStore.logout();
+        navigate(Path.Login);
+      },
+    );
+  };
+
   // check if should send message
   const onInputKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     // if ArrowUp and no userInput, fill with last input
@@ -2316,6 +2355,9 @@ function ChatCom(props: {
         }}
       >
         {messages.map((message, i) => {
+          // 智能体模式的中间步骤消息，不在 UI 中渲染
+          if (message.attr?.agentHidden) return null;
+
           const isUser = message.role === "user";
           const isContext = i < context.length;
           const showActions =
@@ -2425,6 +2467,14 @@ function ChatCom(props: {
                       </div>
                     )}
                   </div>
+                  {!isUser && message.attr?.isToolLoop && message.streaming && (
+                    <div className={styles["chat-message-tools-status"]}>
+                      <div className={styles["chat-message-tools-name"]}>
+                        <LoadingIcon />
+                        &nbsp;正在调用工具...
+                      </div>
+                    </div>
+                  )}
                   {!isUser &&
                     message.toolMessages &&
                     message.toolMessages.map((tool, index) => (
@@ -2964,6 +3014,9 @@ function ChatCom(props: {
           }}
           assistant={session.assistant}
           onDocumentFileSelected={onDocumentFileSelected}
+          agentMode={agentMode}
+          onToggleAgentMode={toggleAgentMode}
+          agentModeSupported={agentModeSupported}
         />
         {useImages.length > 0 && (
           <div className={styles["chat-select-images"]}>
