@@ -28,15 +28,15 @@ export const htmlSvgToImageTool: LocalTool = {
       },
       width: {
         type: "number",
-        description: "渲染容器宽度（像素），默认 800",
-        default: 800,
+        description: "渲染容器宽度（像素），默认 1600",
+        default: 1600,
       },
       height: {
         type: "number",
         description:
-          "渲染容器高度（像素），默认 600。" +
+          "渲染容器高度（像素），默认 1200。" +
           "若传 0 则自动根据内容高度截取（不裁剪）。",
-        default: 600,
+        default: 1200,
       },
       pixel_ratio: {
         type: "number",
@@ -59,8 +59,8 @@ export const htmlSvgToImageTool: LocalTool = {
     }
 
     const html = String(args.html ?? "");
-    const width = Number(args.width ?? 800);
-    const rawHeight = Number(args.height ?? 600);
+    const width = Number(args.width ?? 1600);
+    const rawHeight = Number(args.height ?? 1200);
     const pixelRatio = Math.min(Math.max(Number(args.pixel_ratio ?? 2), 1), 4);
     const filename = String(args.filename ?? "image").replace(/\.png$/i, "");
 
