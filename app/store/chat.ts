@@ -397,7 +397,12 @@ export const useChatStore = createPersistStore(
             topic: session.topic,
             lastUpdate: session.lastUpdate,
             lastSummarizeIndex: session.lastSummarizeIndex,
-            maskJson: JSON.stringify(session.mask),
+            maskJson: JSON.stringify({
+              ...session.mask,
+              modelConfig: (({ agentMode: _, ...rest }) => rest)(
+                session.mask.modelConfig,
+              ),
+            }),
             statJson: JSON.stringify(session.stat),
             assistantJson: JSON.stringify(session.assistant),
           }),
@@ -1873,6 +1878,11 @@ export const useChatStore = createPersistStore(
         const BASE_URL = process.env.BASE_URL;
         const mode = process.env.BUILD_MODE;
         let requestUrl = (mode === "export" ? BASE_URL : "") + "/api" + url;
+        // 剔除后端不认识的本地专属字段，避免 Jackson 反序列化报错
+        const { agentMode: _agentMode, ...modelConfigForServer } =
+          mask.modelConfig;
+        const maskForServer = { ...mask, modelConfig: modelConfigForServer };
+
         return fetch(requestUrl, {
           method: "put",
           headers: {
@@ -1880,7 +1890,7 @@ export const useChatStore = createPersistStore(
           },
           body: JSON.stringify({
             uuid: session.uuid,
-            maskJson: JSON.stringify(mask),
+            maskJson: JSON.stringify(maskForServer),
           }),
         })
           .then((res) => res.json())
@@ -2141,7 +2151,12 @@ export const useChatStore = createPersistStore(
                     topic: session.topic,
                     lastUpdate: session.lastUpdate,
                     lastSummarizeIndex: session.lastSummarizeIndex,
-                    maskJson: JSON.stringify(session.mask),
+                    maskJson: JSON.stringify({
+                      ...session.mask,
+                      modelConfig: (({ agentMode: _, ...rest }) => rest)(
+                        session.mask.modelConfig,
+                      ),
+                    }),
                     statJson: JSON.stringify(session.stat),
                     messageStruct: null, // session.messageStruct
                     clearContextIndex: session.clearContextIndex,
