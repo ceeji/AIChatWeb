@@ -1100,6 +1100,33 @@ function RefreshDrawStatus(props: {
 
 type RenderMessage = ChatMessage & { preview?: boolean };
 
+/**
+ * Parse attachment markers embedded in message.content as a fallback
+ * when attr.documents is unavailable (e.g., after server sync without attrJson).
+ *
+ * Format written by doSubmit:
+ *   [附件: filename]\n\ncontent\n\n---\n\n[附件: filename2]\n\ncontent2
+ *   (optionally preceded by user text)
+ */
+function parseAttachmentsFromContent(content: string): {
+  userText: string;
+  attachmentNames: string[];
+} | null {
+  // Match both CN and EN marker formats
+  const markerRe = /\[(?:附件|Attachment): ([^\]]+)\]/g;
+  const names: string[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = markerRe.exec(content)) !== null) {
+    names.push(m[1]);
+  }
+  if (names.length === 0) return null;
+
+  // Everything before the first marker is the real user text
+  const firstIdx = content.search(/\[(?:附件|Attachment): /);
+  const userText = firstIdx > 0 ? content.slice(0, firstIdx).trim() : "";
+  return { userText, attachmentNames: names };
+}
+
 interface PendingDocument {
   id: string;
   filename: string;
@@ -2502,55 +2529,86 @@ function ChatCom(props: {
                     </div>
                   )}
                   <div className={styles["chat-message-item"]}>
-                    {(!isUser || (message.content ?? "").length > 0) && (
-                      <Markdown
-                        content={
-                          isUser && message.attr?.documents?.length
-                            ? (message.attr.userText ?? "")
-                            : message.content
-                        }
-                        loading={
-                          (message.preview ||
-                            (message.content ?? "").length === 0) &&
-                          !isUser
-                        }
-                        onContextMenu={(e) => onRightClick(e, message)}
-                        onDoubleClickCapture={() => {
-                          if (!isMobileScreen) return;
-                          setUserInput(message.content);
-                        }}
-                        fontSize={fontSize}
-                        parentRef={scrollRef}
-                        defaultShow={i >= messages.length - 6}
-                      />
-                    )}
-                    {isUser &&
-                      message.attr?.documents &&
-                      message.attr.documents.length > 0 && (
-                        <div className={styles["chat-message-attachments"]}>
-                          {message.attr.documents.map(
-                            (doc: AttachedDocument, idx: number) => (
-                              <div
-                                key={idx}
-                                className={styles["chat-message-attach-chip"]}
-                                title={`${(doc.parsedChars / 1000).toFixed(1)}K 字符${doc.truncated ? "（已截断）" : ""}`}
-                              >
-                                <span>📎</span>
-                                <span>{doc.filename}</span>
-                                {doc.truncated && (
-                                  <span
-                                    className={
-                                      styles["chat-message-attach-truncated"]
-                                    }
-                                  >
-                                    {Locale.Chat.DocumentUpload.Truncated}
-                                  </span>
-                                )}
-                              </div>
-                            ),
+                    {(() => {
+                      // Determine if this user message has attachments.
+                      // Primary source: attr.documents (set at send time, persisted in localStorage).
+                      // Fallback: parse [附件: xxx] markers from content
+                      //   (works after server sync where attrJson may not be deserialized).
+                      const attrDocs = isUser
+                        ? message.attr?.documents
+                        : undefined;
+                      const parsedFallback =
+                        isUser && !attrDocs?.length
+                          ? parseAttachmentsFromContent(message.content ?? "")
+                          : null;
+
+                      const hasAttachments =
+                        (attrDocs?.length ?? 0) > 0 || parsedFallback !== null;
+
+                      const displayContent = hasAttachments
+                        ? (message.attr?.userText ??
+                          parsedFallback?.userText ??
+                          "")
+                        : (message.content ?? "");
+
+                      // Chip list: prefer rich attr.documents metadata,
+                      // fall back to names extracted from content.
+                      const chipNames: string[] =
+                        attrDocs?.map((d: AttachedDocument) => d.filename) ??
+                        parsedFallback?.attachmentNames ??
+                        [];
+
+                      const isTruncated = (filename: string) =>
+                        attrDocs?.find(
+                          (d: AttachedDocument) => d.filename === filename,
+                        )?.truncated ?? false;
+
+                      return (
+                        <>
+                          {(!isUser || displayContent.length > 0) && (
+                            <Markdown
+                              content={displayContent}
+                              loading={
+                                (message.preview ||
+                                  (message.content ?? "").length === 0) &&
+                                !isUser
+                              }
+                              onContextMenu={(e) => onRightClick(e, message)}
+                              onDoubleClickCapture={() => {
+                                if (!isMobileScreen) return;
+                                setUserInput(message.content);
+                              }}
+                              fontSize={fontSize}
+                              parentRef={scrollRef}
+                              defaultShow={i >= messages.length - 6}
+                            />
                           )}
-                        </div>
-                      )}
+                          {isUser && chipNames.length > 0 && (
+                            <div className={styles["chat-message-attachments"]}>
+                              {chipNames.map((name, idx) => (
+                                <div
+                                  key={idx}
+                                  className={styles["chat-message-attach-chip"]}
+                                  title={name}
+                                >
+                                  <span>📎</span>
+                                  <span>{name}</span>
+                                  {isTruncated(name) && (
+                                    <span
+                                      className={
+                                        styles["chat-message-attach-truncated"]
+                                      }
+                                    >
+                                      {Locale.Chat.DocumentUpload.Truncated}
+                                    </span>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </>
+                      );
+                    })()}
                     {isUser && message.attr?.imageMode && (
                       <div>
                         <div

@@ -1915,7 +1915,14 @@ export const useChatStore = createPersistStore(
           memoryPrompt: msg.memoryPrompt ? msg.memoryPrompt : "",
           messages: msg.messageList.map((item: any) => {
             item = { ...item };
-            if (!item.attr) {
+            // Parse attrJson back into attr if the backend returned it as a string
+            if (!item.attr && item.attrJson) {
+              try {
+                item.attr = JSON.parse(item.attrJson);
+              } catch {
+                item.attr = {};
+              }
+            } else if (!item.attr) {
               item.attr = {};
             }
             return item;
