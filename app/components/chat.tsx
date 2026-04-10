@@ -2362,6 +2362,15 @@ function ChatCom(props: {
         {messages.map((message, i) => {
           // 智能体模式的中间步骤消息，不在 UI 中渲染
           if (message.attr?.agentHidden) return null;
+          // 历史记录兼容：isToolLoop=true 的 user 角色消息是工具结果消息，始终隐藏
+          if (message.attr?.isToolLoop && message.role === "user") return null;
+          // 历史记录兼容：isToolLoop=true 且内容为空的 assistant 消息是中断的中间迭代，隐藏
+          if (
+            message.attr?.isToolLoop &&
+            !message.streaming &&
+            (message.content ?? "").length === 0
+          )
+            return null;
 
           const isUser = message.role === "user";
           const isContext = i < context.length;

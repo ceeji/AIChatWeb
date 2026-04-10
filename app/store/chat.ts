@@ -334,17 +334,16 @@ export const useChatStore = createPersistStore(
       async updateSessionMaxTokens(
         modelConfig: ModelConfig,
       ): Promise<ModelConfig> {
-        if (
-          modelConfig.model == "AI对话（高级）" ||
-          modelConfig.model == "AI对话（普通）" ||
-          modelConfig.model == "识图对话（高级）" ||
-          modelConfig.model == "Kimi（128K长文本）"
-        ) {
-          modelConfig.max_tokens = 100000;
-        } else if (modelConfig.model == "AI写作专用") {
+        // 图像类模型不需要大 context，直接返回
+        if (modelConfig.contentType === "Image") {
+          return modelConfig;
+        }
+        // 特定写作专用模型给更高上限
+        if (modelConfig.model == "AI写作专用") {
           modelConfig.max_tokens = 180000;
-        } else {
-          modelConfig.max_tokens = 6000;
+        } else if (modelConfig.max_tokens < 100000) {
+          // 非图像模型确保至少 100K tokens
+          modelConfig.max_tokens = 100000;
         }
 
         return modelConfig;
@@ -841,76 +840,90 @@ export const useChatStore = createPersistStore(
           }
 
           // 7. 再次调用 LLM（不携带 plugins，agent 循环内部不走 langchain）
-          await api.llm.chat({
-            sessionUuid: session.uuid,
-            messages: nextRecentMessages,
-            userMessage: toolResultMessage,
-            botMessage: nextBotMessage,
-            content: toolResultContent,
-            agentMode: true, // 智能体迭代：发送完整上下文
-            config: { ...modelConfig, stream: true },
-            plugins: [],
-            mask: effectiveMask, // 含工具提示的 mask.context（服务端同步路径使用）
-            resend: false,
-            imageMode: "" as ImageMode,
-            baseImages: [],
-            assistantUuid: undefined,
-            threadUuid: undefined,
-            onUpdate(msg) {
-              nextBotMessage.streaming = true;
-              if (msg) {
-                // 循环迭代中同样过滤 tool_call 标签，只显示前置说明文字
-                nextBotMessage.content = getDisplayContent(msg);
-              }
-              get().updateLocalCurrentSession((s) => {
-                s.messages = s.messages.concat();
-              });
-            },
-            onToolUpdate() {},
-            onCreateRun() {},
-            onUpdateRun() {},
-            onUpdateRunStep() {},
-            onUpdateMessages() {},
-            async onFinish(nextMessage) {
-              nextBotMessage.streaming = false;
-              if (nextMessage) {
-                // onFinish 里收到的是完整原始内容（含 tool_call 标签）
-                // 保存到 attr.rawContent，以便后续迭代发送完整上下文
-                if (hasToolCalls(nextMessage)) {
-                  nextBotMessage.attr.rawContent = nextMessage;
-                }
-                // UI 显示时只保留 tool_call 之前的部分
-                nextBotMessage.content = getDisplayContent(nextMessage);
-                get().updateLocalCurrentSession((s) => {
-                  s.messages = s.messages.concat();
-                });
-                // 递归：继续检测工具调用（传入原始完整内容）
-                await runAgentIteration(
-                  nextBotMessage,
-                  nextMessage,
-                  iteration + 1,
+          // 使用 Promise 包装，确保 runAgentIteration 真正等待流式完成后才返回，
+          // 避免 fetchEventSource 内部异步导致父级 .finally() 过早触发。
+          await new Promise<void>((iterResolve) => {
+            api.llm
+              .chat({
+                sessionUuid: session.uuid,
+                messages: nextRecentMessages,
+                userMessage: toolResultMessage,
+                botMessage: nextBotMessage,
+                content: toolResultContent,
+                agentMode: true, // 智能体迭代：发送完整上下文
+                config: { ...modelConfig, stream: true },
+                plugins: [],
+                mask: effectiveMask, // 含工具提示的 mask.context（服务端同步路径使用）
+                resend: false,
+                imageMode: "" as ImageMode,
+                baseImages: [],
+                assistantUuid: undefined,
+                threadUuid: undefined,
+                onUpdate(msg) {
+                  nextBotMessage.streaming = true;
+                  if (msg) {
+                    // 循环迭代中同样过滤 tool_call 标签，只显示前置说明文字
+                    nextBotMessage.content = getDisplayContent(msg);
+                  }
+                  get().updateLocalCurrentSession((s) => {
+                    s.messages = s.messages.concat();
+                  });
+                },
+                onToolUpdate() {},
+                onCreateRun() {},
+                onUpdateRun() {},
+                onUpdateRunStep() {},
+                onUpdateMessages() {},
+                async onFinish(nextMessage) {
+                  nextBotMessage.streaming = false;
+                  if (nextMessage) {
+                    // onFinish 里收到的是完整原始内容（含 tool_call 标签）
+                    // 保存到 attr.rawContent，以便后续迭代发送完整上下文
+                    if (hasToolCalls(nextMessage)) {
+                      nextBotMessage.attr.rawContent = nextMessage;
+                    }
+                    // UI 显示时只保留 tool_call 之前的部分
+                    nextBotMessage.content = getDisplayContent(nextMessage);
+                    get().updateLocalCurrentSession((s) => {
+                      s.messages = s.messages.concat();
+                    });
+                    // 递归：继续检测工具调用（传入原始完整内容）
+                    await runAgentIteration(
+                      nextBotMessage,
+                      nextMessage,
+                      iteration + 1,
+                    );
+                  }
+                  ChatControllerPool.remove(session.id, nextBotMessage.id);
+                  iterResolve();
+                },
+                onError(error) {
+                  const isAborted = error.message.includes("aborted");
+                  nextBotMessage.content +=
+                    "\n\n[工具调用出错: " + error.message + "]";
+                  nextBotMessage.streaming = false;
+                  nextBotMessage.isError = !isAborted;
+                  get().updateLocalCurrentSession((s) => {
+                    s.messages = s.messages.concat();
+                  });
+                  ChatControllerPool.remove(session.id, nextBotMessage.id);
+                  iterResolve();
+                },
+                onController(controller) {
+                  ChatControllerPool.addController(
+                    session.id,
+                    nextBotMessage.id,
+                    controller,
+                  );
+                },
+              })
+              .catch((e: unknown) => {
+                console.error(
+                  "[AgentMode] api.llm.chat threw unexpected error:",
+                  e,
                 );
-              }
-              ChatControllerPool.remove(session.id, nextBotMessage.id);
-            },
-            onError(error) {
-              const isAborted = error.message.includes("aborted");
-              nextBotMessage.content +=
-                "\n\n[工具调用出错: " + error.message + "]";
-              nextBotMessage.streaming = false;
-              nextBotMessage.isError = !isAborted;
-              get().updateLocalCurrentSession((s) => {
-                s.messages = s.messages.concat();
+                iterResolve();
               });
-              ChatControllerPool.remove(session.id, nextBotMessage.id);
-            },
-            onController(controller) {
-              ChatControllerPool.addController(
-                session.id,
-                nextBotMessage.id,
-                controller,
-              );
-            },
           });
         };
 

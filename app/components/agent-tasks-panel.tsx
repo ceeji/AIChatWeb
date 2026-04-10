@@ -46,12 +46,15 @@ function TaskItem({ task }: { task: AgentTask }) {
 /**
  * 智能体任务面板
  *
- * 固定在 chat-input-panel 顶部，仅在有任务时显示。
+ * 固定在 chat-input-panel 顶部，仅在有任务且未关闭时显示。
+ * 用户可点击右上角关闭按钮隐藏；AI 再次调用 todowrite 时自动恢复显示。
  */
 export function AgentTasksPanel() {
   const tasks = useAgentTaskStore((s) => s.tasks);
+  const dismissed = useAgentTaskStore((s) => s.dismissed);
+  const dismiss = useAgentTaskStore((s) => s.dismiss);
 
-  if (tasks.length === 0) return null;
+  if (tasks.length === 0 || dismissed) return null;
 
   return (
     <div className={styles["agent-tasks-panel"]}>
@@ -67,8 +70,17 @@ export function AgentTasksPanel() {
             <rect x="7" y="11.5" width="8" height="1" rx="0.5" />
           </svg>
         </div>
-        智能体执行计划（{tasks.filter((t) => t.status === "done").length}/
-        {tasks.length}）
+        <span className={styles["agent-tasks-header-title"]}>
+          智能体执行计划（{tasks.filter((t) => t.status === "done").length}/
+          {tasks.length}）
+        </span>
+        <button
+          className={styles["agent-tasks-close-btn"]}
+          title="关闭计划面板"
+          onClick={dismiss}
+        >
+          ✕
+        </button>
       </div>
       <div className={styles["agent-tasks-list"]}>
         {tasks.map((task) => (
