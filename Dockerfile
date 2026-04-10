@@ -11,19 +11,17 @@ FROM m.daocloud.io/docker.io/library/node:18-alpine AS builder
 
 WORKDIR /app
 
-COPY package.json yarn.lock ./
+COPY package.json package-lock.json ./
 
-#RUN yarn config set registry https://registry.npmmirror.com/
-RUN yarn config set proxy http://172.17.0.1:8011
-RUN yarn config set https-proxy http://172.17.0.1:8011
-RUN yarn install
+RUN npm config set registry https://registry.npmmirror.com/
+RUN npm install
 
 COPY . .
 
 RUN chmod +x /app/node_modules/.bin/next
 RUN chmod +x /app/node_modules/.bin/cross-env
 
-RUN yarn build
+RUN npm run build
 
 # 构建最终容器
 FROM m.daocloud.io/docker.io/library/node:18-alpine
