@@ -21,6 +21,7 @@ import { callMcpTool } from "./mcp-client";
 export function buildToolSystemPrompt(tools: ToolDefinition[]): string {
   if (tools.length === 0) return "";
 
+  const currentTime = new Date().toLocaleString();
   const hasTodoWrite = tools.some((t) => t.name === "todowrite");
 
   const toolList = tools
@@ -43,6 +44,8 @@ export function buildToolSystemPrompt(tools: ToolDefinition[]): string {
     : "";
 
   return `# 智能体模式（Agent Mode）
+
+当前时间：${currentTime}
 
 你当前运行在 **智能体循环（Agentic Loop）** 中：
 1. 你接收用户的请求

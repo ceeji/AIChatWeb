@@ -165,13 +165,16 @@
 .agent-task-content {
   font-size: 12.5px;
   line-height: 1.4;
-  // 直接用主题 CSS 变量：亮色 rgb(48,48,48)，深色 rgb(187,187,187)，自动随 .dark 切换
   color: var(--black);
   flex: 1;
 
   .status-in-progress & {
     color: #14532d;
     font-weight: 500;
+
+    :global([data-theme="dark"]) & {
+      color: #86efac;
+    }
   }
 
   .status-done & {
@@ -181,6 +184,10 @@
 
   .status-failed & {
     color: #dc2626;
+
+    :global([data-theme="dark"]) & {
+      color: #f87171;
+    }
   }
 }
 

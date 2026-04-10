@@ -2360,6 +2360,8 @@ function ChatCom(props: {
         }}
       >
         {messages.map((message, i) => {
+          // system 角色消息（系统提示词）：任何时候都不应显示在聊天界面
+          if (message.role === "system") return null;
           // 智能体模式中间消息过滤：
           // - user 角色的 agentHidden 消息（工具结果）：始终隐藏
           // - assistant 角色的 agentHidden 消息：只有内容为空时才隐藏；
@@ -2375,6 +2377,13 @@ function ChatCom(props: {
             message.attr?.isToolLoop &&
             !message.streaming &&
             (message.content ?? "").length === 0
+          )
+            return null;
+          // 历史记录兼容：内容包含 <tool_result 标签的消息是工具执行结果，始终隐藏
+          if (
+            message.role === "user" &&
+            typeof message.content === "string" &&
+            /<tool_result[\s>]/.test(message.content)
           )
             return null;
 
