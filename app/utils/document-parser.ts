@@ -121,6 +121,44 @@ async function parsePptx(
   return truncate(parts.join("\n\n"));
 }
 
+async function parseCsv(file: File): Promise<ParseResult> {
+  const text = await file.text();
+  return truncate(text);
+}
+
+async function parseExcel(
+  file: File,
+  onProgress?: (p: ParseProgress) => void,
+): Promise<ParseResult> {
+  onProgress?.({ phase: "reading", ratio: 0.2 });
+
+  // Dynamic import keeps xlsx out of the initial bundle
+  const XLSX = await import("xlsx");
+
+  const arrayBuffer = await file.arrayBuffer();
+  onProgress?.({ phase: "parsing", ratio: 0.5 });
+
+  const workbook = XLSX.read(arrayBuffer, { type: "array" });
+
+  const parts: string[] = [];
+  const sheetNames = workbook.SheetNames;
+
+  sheetNames.forEach((name, idx) => {
+    const sheet = workbook.Sheets[name];
+    // Convert each sheet to CSV
+    const csv = XLSX.utils.sheet_to_csv(sheet, { blankrows: false });
+    if (csv.trim()) {
+      parts.push(`## Sheet: ${name}\n\n${csv}`);
+    }
+    onProgress?.({
+      phase: "parsing",
+      ratio: 0.5 + 0.5 * ((idx + 1) / sheetNames.length),
+    });
+  });
+
+  return truncate(parts.join("\n\n"));
+}
+
 // ─────────────────────────────────────────────
 // Helpers
 // ─────────────────────────────────────────────
@@ -159,6 +197,11 @@ export async function parseDocument(
       return parseDocx(file, onProgress);
     case "pptx":
       return parsePptx(file, onProgress);
+    case "csv":
+      return parseCsv(file);
+    case "xlsx":
+    case "xls":
+      return parseExcel(file, onProgress);
     default:
       throw new Error(`Unsupported file type: .${ext}`);
   }

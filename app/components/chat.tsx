@@ -955,7 +955,7 @@ export function ChatActions(props: {
           <input
             type="file"
             id="chat-doc-file-select-upload"
-            accept=".md,.markdown,.txt,.pdf,.docx,.pptx"
+            accept=".md,.markdown,.txt,.pdf,.docx,.pptx,.csv,.xlsx,.xls"
             multiple
             style={{ display: "none" }}
             onChange={(e) => {
