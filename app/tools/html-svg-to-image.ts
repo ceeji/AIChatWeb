@@ -68,24 +68,28 @@ export const htmlSvgToImageTool: LocalTool = {
       return "html 参数不能为空。";
     }
 
-    // 创建屏幕外容器
+    // 用一个 0×0 的 wrapper 遮住内容，防止用户看到渲染中的元素。
+    // 注意：不能对 container 本身用 position:fixed + 大负数偏移，因为
+    // html-to-image 会克隆元素的完整计算样式（包含 top/left），
+    // 克隆体在 SVG foreignObject 中渲染时内容会偏移到画布之外，导致纯透明图片。
+    const wrapper = document.createElement("div");
+    wrapper.style.cssText =
+      "position:fixed;top:0;left:0;width:0;height:0;overflow:hidden;pointer-events:none;z-index:-9999;";
+
     const container = document.createElement("div");
     container.style.cssText = [
       `width:${width}px`,
       rawHeight > 0 ? `height:${rawHeight}px` : "height:auto",
-      "position:fixed",
-      "top:-99999px",
-      "left:-99999px",
       "overflow:hidden",
       "background:transparent",
-      "z-index:-1",
     ].join(";");
 
     container.innerHTML = html;
-    document.body.appendChild(container);
+    wrapper.appendChild(container);
+    document.body.appendChild(wrapper);
 
     try {
-      // 等待一帧，确保浏览器完成layout/paint（特别是SVG foreignObject）
+      // 等待两帧，确保浏览器完成 layout/paint（特别是 SVG foreignObject）
       await new Promise<void>((resolve) =>
         requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
       );
@@ -130,7 +134,7 @@ export const htmlSvgToImageTool: LocalTool = {
       const msg = e instanceof Error ? e.message : String(e);
       return `截图生成失败：${msg}`;
     } finally {
-      document.body.removeChild(container);
+      document.body.removeChild(wrapper);
     }
   },
 };
