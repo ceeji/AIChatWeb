@@ -18,6 +18,7 @@ import {
 } from "./ui-lib";
 import { IconButton } from "./button";
 import { copyToClipboard, downloadAs, useMobileScreen } from "../utils";
+import { isDesktop, saveFileDialog, writeDesktopFile } from "../utils/platform";
 
 import CopyIcon from "../icons/copy.svg";
 import LoadingIcon from "../icons/three-dots.svg";
@@ -267,7 +268,7 @@ export function RenderExport(props: {
       return {
         id: i.toString(),
         role: role as any,
-        content: role === "user" ? v.textContent ?? "" : v.innerHTML,
+        content: role === "user" ? (v.textContent ?? "") : v.innerHTML,
         date: "",
       };
     });
@@ -455,33 +456,19 @@ export function ImagePreviewer(props: {
     const dom = previewRef.current;
     if (!dom) return;
 
-    const isApp = getClientConfig()?.isApp;
-
     try {
       const blob = await toPng(dom);
       if (!blob) return;
 
-      if (isMobile || (isApp && window.__TAURI__)) {
-        if (isApp && window.__TAURI__) {
-          const result = await window.__TAURI__.dialog.save({
-            defaultPath: `${props.topic}.png`,
-            filters: [
-              {
-                name: "PNG Files",
-                extensions: ["png"],
-              },
-              {
-                name: "All Files",
-                extensions: ["*"],
-              },
-            ],
-          });
+      if (isMobile || (isDesktop() && window.__TAURI__)) {
+        if (isDesktop() && window.__TAURI__) {
+          const result = await saveFileDialog(`${props.topic}.png`, "png");
 
           if (result !== null) {
             const response = await fetch(blob);
             const buffer = await response.arrayBuffer();
             const uint8Array = new Uint8Array(buffer);
-            await window.__TAURI__.fs.writeBinaryFile(result, uint8Array);
+            await writeDesktopFile(result, uint8Array);
             showToast(Locale.Download.Success);
           } else {
             showToast(Locale.Download.Failed);

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { showToast } from "./components/ui-lib";
 import Locale from "./locales";
+import * as platform from "./utils/platform";
 
 export function trimTopic(topic: string) {
   return topic.replace(/[，。！？”“"、,.!?]*$/, "");
@@ -8,14 +9,11 @@ export function trimTopic(topic: string) {
 
 export async function copyToClipboard(text: string) {
   try {
-    if (window.__TAURI__) {
-      window.__TAURI__.writeText(text);
-    } else {
-      await navigator.clipboard.writeText(text);
-    }
-
+    // platform.writeToClipboard handles both Tauri (v2) and navigator.clipboard
+    await platform.writeToClipboard(text);
     showToast(Locale.Copy.Success);
   } catch (error) {
+    // Fallback for insecure contexts (HTTP) or old browsers
     const textArea = document.createElement("textarea");
     textArea.value = text;
     document.body.appendChild(textArea);
@@ -32,26 +30,15 @@ export async function copyToClipboard(text: string) {
 }
 
 export async function downloadAs(text: string, filename: string) {
-  if (window.__TAURI__) {
-    const result = await window.__TAURI__.dialog.save({
-      defaultPath: `${filename}`,
-      filters: [
-        {
-          name: `${filename.split(".").pop()} files`,
-          extensions: [`${filename.split(".").pop()}`],
-        },
-        {
-          name: "All Files",
-          extensions: ["*"],
-        },
-      ],
-    });
-
-    if (result !== null) {
+  if (platform.isDesktop()) {
+    const ext = filename.split(".").pop() ?? "*";
+    const savePath = await platform.saveFileDialog(filename, ext);
+    if (savePath !== null) {
       try {
-        await window.__TAURI__.fs.writeBinaryFile(
-          result,
-          new Uint8Array([...text].map((c) => c.charCodeAt(0))),
+        // Use TextEncoder for proper UTF-8 encoding
+        await platform.writeDesktopFile(
+          savePath,
+          new TextEncoder().encode(text),
         );
         showToast(Locale.Download.Success);
       } catch (error) {

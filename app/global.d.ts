@@ -11,19 +11,16 @@ declare module "*.scss" {
 declare module "*.svg";
 
 declare interface Window {
-  __TAURI__?: {
-    writeText(text: string): Promise<void>;
-    invoke(command: string, payload?: Record<string, unknown>): Promise<any>;
-    dialog: {
-      save(options?: Record<string, unknown>): Promise<string | null>;
-    };
-    fs: {
-      writeBinaryFile(path: string, data: Uint8Array): Promise<void>;
-    };
-    notification: {
-      requestPermission(): Promise<Permission>;
-      isPermissionGranted(): Promise<boolean>;
-      sendNotification(options: string | Options): void;
-    };
-  };
+  /**
+   * Tauri v2 global API (available when withGlobalTauri: true in tauri.conf.json).
+   * Prefer importing from @tauri-apps/plugin-* instead of using this directly.
+   * Use platform.ts helpers for all platform-specific operations.
+   */
+  __TAURI__?: Record<string, unknown>;
+
+  /**
+   * Tauri v2 internal IPC bridge – always injected by the WebView runtime,
+   * regardless of withGlobalTauri setting.  Used by platform.isDesktop().
+   */
+  __TAURI_INTERNALS__?: unknown;
 }
