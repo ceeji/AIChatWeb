@@ -28,6 +28,7 @@ import {
   removeToolCallTags,
   getDisplayContent,
 } from "../utils/tool-calling";
+import { useAgentTaskStore } from "./agent-tasks";
 import { getAllTools } from "../tools/index";
 import { estimateTokenLength } from "../utils/token";
 import { nanoid } from "nanoid";
@@ -698,20 +699,17 @@ export const useChatStore = createPersistStore(
         );
         // 智能体模式：注入工具调用 system prompt
         const agentTools = getAllTools();
-        let effectiveMask = mask;
+        // effectiveMask 始终保持原始 mask（不含工具系统提示），
+        // 避免服务端将工具系统提示保存进 mask.context，
+        // 否则刷新后工具提示会作为 context 消息显示在对话里。
+        const effectiveMask = mask;
         if (isAgentMode && agentTools.length > 0) {
           const toolSystemMsg = createMessage({
             role: "system",
             content: buildToolSystemPrompt(agentTools),
           });
-          // 非服务端同步会话时，recentMessages 作为完整 messages 发出，需要注入
+          // 只注入 recentMessages（发给 AI 推理用），不写入 effectiveMask.context
           recentMessages.unshift(toolSystemMsg);
-          // 服务端同步会话（有 sessionUuid）时，backend 只收到最新 userMessage，
-          // 上下文通过 mask.context 传递，因此把工具提示注入到 context 首位
-          effectiveMask = {
-            ...mask,
-            context: [toolSystemMsg, ...(mask.context ?? [])],
-          };
         }
 
         const sendMessages = recentMessages.concat(userMessage);
@@ -773,6 +771,32 @@ export const useChatStore = createPersistStore(
         ): Promise<void> => {
           const toolCalls = detectAllToolCalls(rawMessage);
           if (toolCalls.length === 0 || iteration >= MAX_AGENT_ITERATIONS) {
+            // ── 迭代结束（无更多工具调用 或 达到最大轮次）──
+            // 1. 保存所有迭代产生的新消息（无 uuid 的）到服务端
+            if (session.uuid) {
+              const unsaved = session.messages.filter((m) => !m.uuid);
+              if (unsaved.length > 0) {
+                get().fetchServerMessageId(session, unsaved, token);
+              }
+            }
+            // 2. 自动将 todowrite 面板中仍处于 pending/in-progress 的步骤标记为 done，
+            //    兼容 AI 未主动调用 todowrite 更新的情况
+            const agentTaskStore = useAgentTaskStore.getState();
+            const currentTasks = agentTaskStore.getSessionTasks(session.id);
+            if (
+              currentTasks.length > 0 &&
+              currentTasks.some(
+                (t) => t.status === "pending" || t.status === "in-progress",
+              )
+            ) {
+              agentTaskStore.setTasks(
+                session.id,
+                currentTasks.map((t) => ({
+                  ...t,
+                  status: t.status === "failed" ? "failed" : "done",
+                })),
+              );
+            }
             return;
           }
 
@@ -1098,6 +1122,13 @@ export const useChatStore = createPersistStore(
                 });
                 // 异步执行工具循环，不阻塞 onFinish 回调
                 runAgentIteration(botMessage, fullMessage, 0).finally(() => {
+                  // agent 循环完成后：持久化 & UI 通知
+                  get().onNewMessage(
+                    websiteConfigStore,
+                    botMessage,
+                    token,
+                    navigateToLogin,
+                  );
                   onFinish();
                   ChatControllerPool.remove(session.id, botMessage.id);
                   if (logout) navigateToLogin();
