@@ -88,17 +88,75 @@ ${toolList}
 
 const TOOL_CALL_REGEX = /<tool_call>([\s\S]*?)<\/tool_call>/g;
 
+// ────────────────────────────────────────────────────────────
+// Kimi / Moonshot 特殊 Token 格式兼容
+// ────────────────────────────────────────────────────────────
+
+/**
+ * Kimi/Moonshot 模型使用的特殊 token 工具调用格式：
+ *   <|tool_calls_section_begin|>
+ *   <|tool_call_begin|>functions.NAME:INDEX<|tool_call_argument_begin|>{ARGS_JSON}
+ *   <|tool_call_end|>
+ *   <|tool_calls_section_end|>
+ */
+const KIMI_SINGLE_CALL_RE =
+  /<\|tool_call_begin\|>([\s\S]*?)<\|tool_call_argument_begin\|>([\s\S]*?)<\|tool_call_end\|>/g;
+
+/** 检测文本中是否包含 Kimi 格式工具调用 */
+function hasKimiToolCalls(text: string): boolean {
+  return (
+    text.includes("<|tool_calls_section_begin|>") ||
+    text.includes("<|tool_call_begin|>")
+  );
+}
+
+/**
+ * 将 Kimi 特殊 token 格式转换为标准 <tool_call> 格式，方便统一处理。
+ * 若文本中不含 Kimi 格式则原样返回。
+ *
+ * 转换规则：
+ * - header 形如 "functions.todowrite:0"，去掉 "functions." 前缀和尾部 ":数字" 序号
+ * - args 为原始 JSON 对象字符串，直接嵌入 "arguments" 字段
+ */
+function normalizeKimiFormat(text: string): string {
+  if (!hasKimiToolCalls(text)) return text;
+
+  KIMI_SINGLE_CALL_RE.lastIndex = 0;
+  let result = text.replace(
+    KIMI_SINGLE_CALL_RE,
+    (_match, header: string, argsJson: string) => {
+      let name = header.trim();
+      if (name.startsWith("functions.")) name = name.slice("functions.".length);
+      // 去掉尾部序号 ":数字"
+      const colon = name.lastIndexOf(":");
+      if (colon !== -1 && /^\d+$/.test(name.slice(colon + 1)))
+        name = name.slice(0, colon);
+      return `<tool_call>\n{"name": "${name}", "arguments": ${argsJson.trim()}}\n</tool_call>`;
+    },
+  );
+
+  result = result
+    .replace(/<\|tool_calls_section_begin\|>/g, "")
+    .replace(/<\|tool_calls_section_end\|>/g, "");
+
+  return result;
+}
+
 /**
  * 从 AI 响应文本中提取所有工具调用
+ * 支持标准 <tool_call> 格式和 Kimi/Moonshot 特殊 token 格式
  */
 export function detectAllToolCalls(text: string): ParsedToolCall[] {
   const calls: ParsedToolCall[] = [];
   let match: RegExpExecArray | null;
 
+  // 先将 Kimi 特殊 token 格式规范化为标准格式
+  const normalized = normalizeKimiFormat(text);
+
   // 重置 regex 状态（lastIndex）
   TOOL_CALL_REGEX.lastIndex = 0;
 
-  while ((match = TOOL_CALL_REGEX.exec(text)) !== null) {
+  while ((match = TOOL_CALL_REGEX.exec(normalized)) !== null) {
     const rawJson = match[1].trim();
     try {
       const parsed = JSON.parse(rawJson);
@@ -117,18 +175,21 @@ export function detectAllToolCalls(text: string): ParsedToolCall[] {
 }
 
 /**
- * 检查文本中是否含有任何工具调用
+ * 检查文本中是否含有任何工具调用（标准格式或 Kimi 格式）
  */
 export function hasToolCalls(text: string): boolean {
+  if (hasKimiToolCalls(text)) return true;
   TOOL_CALL_REGEX.lastIndex = 0;
   return TOOL_CALL_REGEX.test(text);
 }
 
 /**
- * 从 AI 响应中去除所有 <tool_call> 标签（保留其他内容）
+ * 从 AI 响应中去除所有工具调用标签（兼容标准格式和 Kimi 格式）
  */
 export function removeToolCallTags(text: string): string {
-  return text.replace(/<tool_call>[\s\S]*?<\/tool_call>/g, "").trim();
+  // 先规范化 Kimi 格式，再统一去除标准标签
+  const normalized = normalizeKimiFormat(text);
+  return normalized.replace(/<tool_call>[\s\S]*?<\/tool_call>/g, "").trim();
 }
 
 /**
@@ -146,24 +207,43 @@ export function removeToolCallTags(text: string): string {
  *   不会被永久隐藏。
  */
 export function getDisplayContent(text: string, streaming = false): string {
-  // 1. 完整标签（后跟可选空白和 {，确认是 JSON 工具调用而非普通 XML 标签）
-  const FULL_RE = /<tool_call>\s*\{/;
-  const fullMatch = FULL_RE.exec(text);
-  if (fullMatch) return text.slice(0, fullMatch.index).trimEnd();
+  // 0. 过滤 <think>...</think> 推理块（DeepSeek-R1 / Kimi 等思维链模型）
+  //    同时去掉可能单独出现的 </think> 关闭标签（流式分片导致开头已消费）
+  let display = text
+    .replace(/<think>[\s\S]*?<\/think>/g, "")
+    .replace(/<\/think>/g, "")
+    .trimStart();
 
-  // 2. streaming 中途：检测尾部不完整前缀，防止字符动画逐字母暴露
-  //    只截断 "<tool_call>" 各级前缀（即 "<", "<t", …, "<tool_call"）。
-  //    一旦出现非前缀字符（如 "<th"、"<tool_r"），前缀不再匹配，内容立刻恢复。
+  // 1. Kimi 格式：<|tool_calls_section_begin|> 作为截断点
+  const kimiIdx = display.indexOf("<|tool_calls_section_begin|>");
+  if (kimiIdx !== -1) return display.slice(0, kimiIdx).trimEnd();
+
+  // 2. 完整标签（后跟可选空白和 {，确认是 JSON 工具调用而非普通 XML 标签）
+  const FULL_RE = /<tool_call>\s*\{/;
+  const fullMatch = FULL_RE.exec(display);
+  if (fullMatch) return display.slice(0, fullMatch.index).trimEnd();
+
+  // 3. streaming 中途：检测尾部不完整前缀，防止字符动画逐字母暴露
   if (streaming) {
-    const prefix = "<tool_call>";
-    for (let len = prefix.length - 1; len >= 1; len--) {
-      if (text.endsWith(prefix.slice(0, len))) {
-        return text.slice(0, text.length - len).trimEnd();
+    // 检测 <tool_call> 各级前缀（"<", "<t", …, "<tool_call"）
+    const prefix1 = "<tool_call>";
+    for (let len = prefix1.length - 1; len >= 1; len--) {
+      if (display.endsWith(prefix1.slice(0, len))) {
+        return display.slice(0, display.length - len).trimEnd();
+      }
+    }
+
+    // 检测 <|tool_calls_section_begin|> 各级前缀
+    // 最短区分前缀从 len=2（"<|"）开始，len=1（"<"）已由上面的循环覆盖
+    const prefix2 = "<|tool_calls_section_begin|>";
+    for (let len = prefix2.length - 1; len >= 2; len--) {
+      if (display.endsWith(prefix2.slice(0, len))) {
+        return display.slice(0, display.length - len).trimEnd();
       }
     }
   }
 
-  return text;
+  return display;
 }
 
 // ────────────────────────────────────────────────────────────
