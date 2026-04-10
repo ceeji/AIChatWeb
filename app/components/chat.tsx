@@ -1394,6 +1394,7 @@ function ChatCom(props: {
         () => props.setRequestingSession(null),
         docsMeta.length > 0 ? docsMeta : undefined,
         docsMeta.length > 0 ? userInput : undefined,
+        agentMode, // 来自 React useState，立即生效
       )
       .then((result) => {
         setIsLoading(false);
@@ -1753,29 +1754,19 @@ function ChatCom(props: {
     setPluginModels(models);
   }, []);
 
-  // 智能体模式
+  // 智能体模式：使用 useState 保证 doSubmit 时始终读到最新值
   const agentModeSupported = isAgentModeSupported(
     session.mask.modelConfig.model,
     session.mask.modelConfig.contentType,
     mjImageMode,
   );
-  const agentMode = agentModeSupported
-    ? (session.mask.modelConfig.agentMode ?? false)
-    : false;
+  const [agentModeEnabled, setAgentModeEnabled] = useState<boolean>(false);
+  const agentMode = agentModeSupported ? agentModeEnabled : false;
 
-  const toggleAgentMode = async () => {
-    await chatStore.updateCurrentSessionMaskByUpdater(
-      (mask) => {
-        mask.modelConfig.agentMode = !mask.modelConfig.agentMode;
-        mask.syncGlobalConfig = false;
-        return true;
-      },
-      authStore.token,
-      () => {
-        authStore.logout();
-        navigate(Path.Login);
-      },
-    );
+  const toggleAgentMode = () => {
+    if (agentModeSupported) {
+      setAgentModeEnabled((prev) => !prev);
+    }
   };
 
   // check if should send message
@@ -1904,6 +1895,9 @@ function ChatCom(props: {
           navigate(Path.Login);
         },
         () => props.setRequestingSession(null),
+        undefined,
+        undefined,
+        agentMode, // 来自 React useState
       )
       .then((result) => {
         setIsLoading(false);

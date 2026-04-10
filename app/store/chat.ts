@@ -640,9 +640,12 @@ export const useChatStore = createPersistStore(
         onFinish: () => void,
         documents?: AttachedDocument[],
         userText?: string,
+        agentModeOverride?: boolean,
       ) {
         // const session = get().currentSession();
         const modelConfig = session.mask.modelConfig;
+        // agentModeOverride 来自 React useState（立即生效），并魪闭包时序问题
+        const isAgentMode = agentModeOverride ?? modelConfig.agentMode ?? false;
         const sensitiveWordsTip = websiteConfigStore.sensitiveWordsTip;
         const balanceNotEnough = websiteConfigStore.balanceNotEnough;
 
@@ -694,7 +697,7 @@ export const useChatStore = createPersistStore(
         // 智能体模式：注入工具调用 system prompt
         const agentTools = getAllTools();
         let effectiveMask = mask;
-        if (modelConfig.agentMode && agentTools.length > 0) {
+        if (isAgentMode && agentTools.length > 0) {
           const toolSystemMsg = createMessage({
             role: "system",
             content: buildToolSystemPrompt(agentTools),
@@ -825,7 +828,7 @@ export const useChatStore = createPersistStore(
           const nextRecentMessages =
             get().getMessagesWithMemory(websiteConfigStore);
           // 对于非服务端同步会话，也把工具提示放到 nextRecentMessages 首位
-          if (modelConfig.agentMode && getAllTools().length > 0) {
+          if (isAgentMode && getAllTools().length > 0) {
             nextRecentMessages.unshift(
               createMessage({
                 role: "system",
@@ -1033,7 +1036,7 @@ export const useChatStore = createPersistStore(
               }
 
               // 智能体模式：检测工具调用，若有则启动迭代循环
-              if (modelConfig.agentMode && hasToolCalls(message)) {
+              if (isAgentMode && hasToolCalls(message)) {
                 botMessage.attr.isToolLoop = true;
                 get().updateLocalCurrentSession((s) => {
                   s.messages = s.messages.concat();
