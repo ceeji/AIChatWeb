@@ -26,6 +26,7 @@ import {
   executeToolsParallel,
   formatToolResults,
   removeToolCallTags,
+  getDisplayContent,
 } from "../utils/tool-calling";
 import { getAllTools } from "../tools/index";
 import { estimateTokenLength } from "../utils/token";
@@ -854,7 +855,10 @@ export const useChatStore = createPersistStore(
             threadUuid: undefined,
             onUpdate(msg) {
               nextBotMessage.streaming = true;
-              if (msg) nextBotMessage.content = msg;
+              if (msg) {
+                // 循环迭代中同样过滤 tool_call 标签，只显示前置说明文字
+                nextBotMessage.content = getDisplayContent(msg);
+              }
               get().updateLocalCurrentSession((s) => {
                 s.messages = s.messages.concat();
               });
@@ -867,11 +871,13 @@ export const useChatStore = createPersistStore(
             async onFinish(nextMessage) {
               nextBotMessage.streaming = false;
               if (nextMessage) {
-                nextBotMessage.content = nextMessage;
+                // onFinish 里收到的是完整原始内容（含 tool_call 标签）
+                // UI 显示时只保留 tool_call 之前的部分
+                nextBotMessage.content = getDisplayContent(nextMessage);
                 get().updateLocalCurrentSession((s) => {
                   s.messages = s.messages.concat();
                 });
-                // 递归：继续检测工具调用
+                // 递归：继续检测工具调用（传入原始完整内容）
                 await runAgentIteration(
                   nextBotMessage,
                   nextMessage,
@@ -903,6 +909,8 @@ export const useChatStore = createPersistStore(
 
         // make request
         const assistantUuid = session.assistant?.uuid;
+        // 智能体模式下，保存完整原始流内容用于 onFinish 检测工具调用
+        let _rawAgentContent = "";
         return api.llm.chat({
           sessionUuid: session.uuid, // 携带上session uuid，系统才会云同步
           messages: sendMessages,
@@ -918,10 +926,16 @@ export const useChatStore = createPersistStore(
           assistantUuid: assistantUuid,
           threadUuid: session.threadUuid,
           onUpdate(message) {
-            console.log("onUpdate", message);
             botMessage.streaming = true;
             if (message) {
-              botMessage.content = message;
+              if (isAgentMode) {
+                // 保留原始内容供 onFinish 检测工具调用
+                _rawAgentContent = message;
+                // UI 只显示 <tool_call> 之前的内容
+                botMessage.content = getDisplayContent(message);
+              } else {
+                botMessage.content = message;
+              }
             }
             get().updateLocalCurrentSession((session) => {
               session.messages = session.messages.concat();
@@ -1036,13 +1050,18 @@ export const useChatStore = createPersistStore(
               }
 
               // 智能体模式：检测工具调用，若有则启动迭代循环
-              if (isAgentMode && hasToolCalls(message)) {
+              // 优先使用 _rawAgentContent（完整原始内容，含 tool_call 标签）
+              const fullMessage =
+                isAgentMode && _rawAgentContent ? _rawAgentContent : message;
+              if (isAgentMode && hasToolCalls(fullMessage)) {
+                // UI 只保留 tool_call 之前的说明文字
+                botMessage.content = getDisplayContent(fullMessage);
                 botMessage.attr.isToolLoop = true;
                 get().updateLocalCurrentSession((s) => {
                   s.messages = s.messages.concat();
                 });
                 // 异步执行工具循环，不阻塞 onFinish 回调
-                runAgentIteration(botMessage, message, 0).finally(() => {
+                runAgentIteration(botMessage, fullMessage, 0).finally(() => {
                   onFinish();
                   ChatControllerPool.remove(session.id, botMessage.id);
                   if (logout) navigateToLogin();

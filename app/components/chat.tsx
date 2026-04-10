@@ -2461,14 +2461,17 @@ function ChatCom(props: {
                       </div>
                     )}
                   </div>
-                  {!isUser && message.attr?.isToolLoop && message.streaming && (
-                    <div className={styles["chat-message-tools-status"]}>
-                      <div className={styles["chat-message-tools-name"]}>
-                        <LoadingIcon />
-                        &nbsp;正在调用工具...
+                  {!isUser &&
+                    message.streaming &&
+                    (message.attr?.isToolLoop ||
+                      (agentMode && (message.content ?? "").length === 0)) && (
+                      <div className={styles["chat-message-tools-status"]}>
+                        <div className={styles["chat-message-tools-name"]}>
+                          <LoadingIcon />
+                          &nbsp;正在调用工具...
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    )}
                   {!isUser &&
                     message.toolMessages &&
                     message.toolMessages.map((tool, index) => (

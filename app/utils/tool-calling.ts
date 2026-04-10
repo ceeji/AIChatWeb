@@ -28,20 +28,34 @@ export function buildToolSystemPrompt(tools: ToolDefinition[]): string {
     })
     .join("\n\n");
 
-  return `# 工具调用指南
+  return `# 智能体模式（Agent Mode）
 
-你是一个可以调用外部工具的智能助手。当需要使用工具时，请使用以下格式输出（不要包含任何其他内容，只输出 tool_call 标签）：
+你当前运行在 **智能体循环（Agentic Loop）** 中：
+1. 你接收用户的请求
+2. 分析是否需要调用工具来获取信息或执行操作
+3. 如需调用工具，以规定格式输出工具调用，系统会自动执行并将结果返回给你
+4. 你根据工具结果继续思考，直到可以给出最终答案
+5. 整个循环最多可以迭代 15 次，请合理规划步骤
+
+**工具调用格式**（严格遵守，不得修改标签格式）：
 
 <tool_call>
 {"name": "工具名称", "arguments": {"参数名": "参数值"}}
 </tool_call>
 
 **重要规则：**
-1. 一次可以同时调用多个工具，每个工具调用独立使用一个 <tool_call> 标签
-2. 如果不需要调用工具，直接正常回答用户
-3. 工具调用成功后，你会收到结果，再据此给出最终回答
-4. 不要编造工具调用结果，等待实际执行结果
-5. 如果工具调用返回错误，根据错误信息判断是重试还是直接告知用户
+1. 一次可以同时调用多个工具，每个调用使用独立的 <tool_call> 标签
+2. 在输出 <tool_call> 之前，你可以先用自然语言简要说明你要做什么（例如"让我来搜索一下..."）
+3. 一旦开始输出 <tool_call>，之后不要再输出其他文本，等待工具执行结果
+4. 如果不需要任何工具，直接正常回答用户
+5. 不要编造工具调用结果，必须等待实际执行返回的内容
+6. 工具执行失败时，根据错误信息判断是重试、换用其他工具，还是直接告知用户
+
+**长期任务指南：**
+- 复杂任务可以分多步完成，每步使用不同的工具
+- 如果一个工具返回结果不完整，可以继续调用其他工具补充
+- 对于需要多次迭代的任务（如搜索→阅读→总结），请逐步推进
+- 给出最终答案前，确认已收集到足够信息
 
 ## 可用工具列表
 
@@ -98,6 +112,18 @@ export function hasToolCalls(text: string): boolean {
  */
 export function removeToolCallTags(text: string): string {
   return text.replace(/<tool_call>[\s\S]*?<\/tool_call>/g, "").trim();
+}
+
+/**
+ * 截取 streaming 文本中用于 UI 显示的部分：
+ * - 若尚未出现 <tool_call>，返回原文本
+ * - 若已出现 <tool_call> 开始标签（即使未闭合），只保留其之前的文本
+ * 这样 streaming 过程中工具调用内容不会暴露给用户。
+ */
+export function getDisplayContent(streamingText: string): string {
+  const idx = streamingText.indexOf("<tool_call>");
+  if (idx === -1) return streamingText;
+  return streamingText.slice(0, idx).trimEnd();
 }
 
 // ────────────────────────────────────────────────────────────
