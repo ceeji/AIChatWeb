@@ -693,12 +693,20 @@ export const useChatStore = createPersistStore(
         );
         // 智能体模式：注入工具调用 system prompt
         const agentTools = getAllTools();
+        let effectiveMask = mask;
         if (modelConfig.agentMode && agentTools.length > 0) {
           const toolSystemMsg = createMessage({
             role: "system",
             content: buildToolSystemPrompt(agentTools),
           });
+          // 非服务端同步会话时，recentMessages 作为完整 messages 发出，需要注入
           recentMessages.unshift(toolSystemMsg);
+          // 服务端同步会话（有 sessionUuid）时，backend 只收到最新 userMessage，
+          // 上下文通过 mask.context 传递，因此把工具提示注入到 context 首位
+          effectiveMask = {
+            ...mask,
+            context: [toolSystemMsg, ...(mask.context ?? [])],
+          };
         }
 
         const sendMessages = recentMessages.concat(userMessage);
@@ -816,12 +824,14 @@ export const useChatStore = createPersistStore(
           // 6. 重新构建完整对话上下文（含新加的隐藏消息）
           const nextRecentMessages =
             get().getMessagesWithMemory(websiteConfigStore);
+          // 对于非服务端同步会话，也把工具提示放到 nextRecentMessages 首位
           if (modelConfig.agentMode && getAllTools().length > 0) {
-            const toolSystemMsg = createMessage({
-              role: "system",
-              content: buildToolSystemPrompt(getAllTools()),
-            });
-            nextRecentMessages.unshift(toolSystemMsg);
+            nextRecentMessages.unshift(
+              createMessage({
+                role: "system",
+                content: buildToolSystemPrompt(getAllTools()),
+              }),
+            );
           }
 
           // 7. 再次调用 LLM（不携带 plugins，agent 循环内部不走 langchain）
@@ -833,7 +843,7 @@ export const useChatStore = createPersistStore(
             content: toolResultContent,
             config: { ...modelConfig, stream: true },
             plugins: [],
-            mask,
+            mask: effectiveMask, // 含工具提示的 mask.context（服务端同步路径使用）
             resend: false,
             imageMode: "" as ImageMode,
             baseImages: [],
@@ -898,7 +908,7 @@ export const useChatStore = createPersistStore(
           content: userContent,
           config: { ...modelConfig, stream: true },
           plugins: plugins,
-          mask,
+          mask: effectiveMask, // 含工具提示的 mask.context（服务端同步路径使用）
           resend,
           imageMode,
           baseImages,
