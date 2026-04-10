@@ -168,7 +168,8 @@
   color: #111;
   flex: 1;
 
-  :global([data-theme="dark"]) & {
+  // 此项目用 .dark class 切换主题，而非 [data-theme="dark"] attribute
+  :global(.dark) & {
     color: #e8e8e8;
   }
 
@@ -176,7 +177,7 @@
     color: #14532d;
     font-weight: 500;
 
-    :global([data-theme="dark"]) & {
+    :global(.dark) & {
       color: #86efac;
     }
   }
@@ -185,7 +186,7 @@
     text-decoration: line-through;
     color: #777;
 
-    :global([data-theme="dark"]) & {
+    :global(.dark) & {
       color: #555;
     }
   }

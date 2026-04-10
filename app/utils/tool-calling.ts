@@ -67,7 +67,7 @@ ${planningSection}
 **长期任务指南：**
 - 复杂任务可以分多步完成，每步使用不同的工具
 - 如果一个工具返回结果不完整，可以继续调用其他工具补充
-- 对于需要多次迭代的任务（如搜索→阅读→总结），请逐步推进
+- 对于需要多次迭代的任务（如搜索→阅读→总结），请逐步推进，并及时调用 todowrite 工具更新任务状态（如果可用），以便用户了解进度
 - 给出最终答案前，确认已收集到足够信息
 
 ## 可用工具列表
@@ -223,7 +223,7 @@ export async function executeToolsParallel(
 export function formatToolResults(results: ToolResult[]): string {
   const parts = results.map((r) => {
     const status = r.isError ? "（执行失败）" : "（执行成功）";
-    return `<tool_result name="${r.name}"${r.isError ? ' error="true"' : ""}>\n${r.result}\n</tool_result>`;
+    return `如有需要，及时调用 todowrite 工具更新任务状态。\n\n<tool_result name="${r.name}"${r.isError ? ' error="true"' : ""}>\n${r.result}\n</tool_result>`;
   });
 
   return `${parts.join("\n\n")}`;

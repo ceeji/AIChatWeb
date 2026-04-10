@@ -2360,8 +2360,14 @@ function ChatCom(props: {
         }}
       >
         {messages.map((message, i) => {
-          // 智能体模式的中间步骤消息，不在 UI 中渲染
-          if (message.attr?.agentHidden) return null;
+          // 智能体模式中间消息过滤：
+          // - user 角色的 agentHidden 消息（工具结果）：始终隐藏
+          // - assistant 角色的 agentHidden 消息：只有内容为空时才隐藏；
+          //   若 <tool_call> 之前有说明性文字，内容已由 getDisplayContent 过滤保留，应正常展示
+          if (message.attr?.agentHidden) {
+            if (message.role === "user") return null;
+            if ((message.content ?? "").trim().length === 0) return null;
+          }
           // 历史记录兼容：isToolLoop=true 的 user 角色消息是工具结果消息，始终隐藏
           if (message.attr?.isToolLoop && message.role === "user") return null;
           // 历史记录兼容：isToolLoop=true 且内容为空的 assistant 消息是中断的中间迭代，隐藏
