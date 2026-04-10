@@ -11,6 +11,8 @@ import { exaSearchTool } from "./exa-search";
 import { markdownToWordTool } from "./markdown-to-word";
 import { fetchWebpageTool } from "./fetch-webpage";
 import { todoWriteTool } from "./todo-write";
+import { htmlSvgToImageTool } from "./html-svg-to-image";
+import { generateAndDownloadFileTool } from "./generate-and-download";
 
 // ────────────────────────────────────────────────────────────
 // 模型黑名单：包含这些子串的模型名不支持智能体模式
@@ -88,3 +90,5 @@ registerTool(todoWriteTool); // 必须第一个注册，便于系统提示引导
 registerTool(exaSearchTool);
 registerTool(markdownToWordTool);
 registerTool(fetchWebpageTool);
+registerTool(htmlSvgToImageTool);
+registerTool(generateAndDownloadFileTool);
