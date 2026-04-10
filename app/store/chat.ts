@@ -842,17 +842,6 @@ export const useChatStore = createPersistStore(
           });
           toolResultMessage.attr.agentHidden = true;
 
-          // 4. 创建下一个 bot 消息（暂时空，将由流式填充）
-          const nextBotMessage = createMessage({
-            role: "assistant",
-            streaming: true,
-            model: modelConfig.model,
-            toolMessages: [] as ChatToolMessage[],
-          });
-          nextBotMessage.attr.contentType =
-            session.mask?.modelConfig?.contentType;
-          nextBotMessage.attr.isToolLoop = true;
-
           // 5. 先只把 toolResultMessage 追加到 session；
           //    nextBotMessage（内容为空的 streaming 占位）稍后再加，
           //    避免 getMessagesWithMemory 把它包含进去发给服务器
@@ -860,39 +849,57 @@ export const useChatStore = createPersistStore(
           session.messages.push(toolResultMessage);
           updateSessionState();
 
-          // 6. 重新构建完整对话上下文（此时 nextBotMessage 尚未入列）
-          const nextRecentMessages =
-            get().getMessagesWithMemory(websiteConfigStore);
-          // 对于非服务端同步会话，也把工具提示放到 nextRecentMessages 首位
-          if (isAgentMode && getAllTools().length > 0) {
-            nextRecentMessages.unshift(
-              createMessage({
-                role: "system",
-                content: buildToolSystemPrompt(getAllTools()),
-              }),
-            );
-          }
+          /**
+           * callLLMAndContinue：
+           * 从给定的 userMsg 出发，创建新的 bot 消息并调用 LLM，然后继续智能体循环。
+           * 当 LLM 调用出错（非用户中止）时，将错误信息包装为工具结果消息传回智能体，
+           * 让智能体感知错误并继续迭代，而不是直接终止循环。
+           */
+          const callLLMAndContinue = (
+            userMsg: ChatMessage,
+            nextIteration: number,
+            iterResolve: () => void,
+          ): void => {
+            // 4. 创建下一个 bot 消息（暂时空，将由流式填充）
+            const botMsg = createMessage({
+              role: "assistant",
+              streaming: true,
+              model: modelConfig.model,
+              toolMessages: [] as ChatToolMessage[],
+            });
+            botMsg.attr.contentType = session.mask?.modelConfig?.contentType;
+            botMsg.attr.isToolLoop = true;
 
-          // 上下文确定后，再把 nextBotMessage 加入 session（供 UI streaming 渲染）
-          session.messages.push(nextBotMessage);
-          updateSessionState();
+            // 6. 重新构建完整对话上下文（此时 botMsg 尚未入列）
+            const recentMessages =
+              get().getMessagesWithMemory(websiteConfigStore);
+            // 对于非服务端同步会话，也把工具提示放到 recentMessages 首位
+            if (isAgentMode && getAllTools().length > 0) {
+              recentMessages.unshift(
+                createMessage({
+                  role: "system",
+                  content: buildToolSystemPrompt(getAllTools()),
+                }),
+              );
+            }
 
-          // 7. 再次调用 LLM（不携带 plugins，agent 循环内部不走 langchain）
-          // 使用 Promise 包装，确保 runAgentIteration 真正等待流式完成后才返回，
-          // 避免 fetchEventSource 内部异步导致父级 .finally() 过早触发。
-          await new Promise<void>((iterResolve) => {
+            // 上下文确定后，再把 botMsg 加入 session（供 UI streaming 渲染）
+            session.messages.push(botMsg);
+            updateSessionState();
+
+            // 7. 再次调用 LLM（不携带 plugins，agent 循环内部不走 langchain）
+            // 迭代轮次不传 sessionUuid：
+            // 服务端收到 sessionUuid 后会对 messages 数组里的所有消息执行 INSERT，
+            // 而 userMessage/botMessage 在首轮 fetchServerMessageId 时已经 INSERT，
+            // 重复 INSERT 会触发唯一索引冲突（code:10300 duplicate entry）。
+            // 不传 sessionUuid 则服务端只做推理，不触发消息持久化。
             api.llm
               .chat({
-                // 迭代轮次不传 sessionUuid：
-                // 服务端收到 sessionUuid 后会对 messages 数组里的所有消息执行 INSERT，
-                // 而 userMessage/botMessage 在首轮 fetchServerMessageId 时已经 INSERT，
-                // 重复 INSERT 会触发唯一索引冲突（code:10300 duplicate entry）。
-                // 不传 sessionUuid 则服务端只做推理，不触发消息持久化。
                 sessionUuid: undefined,
-                messages: nextRecentMessages,
-                userMessage: toolResultMessage,
-                botMessage: nextBotMessage,
-                content: toolResultContent,
+                messages: recentMessages,
+                userMessage: userMsg,
+                botMessage: botMsg,
+                content: userMsg.content,
                 agentMode: true, // 智能体迭代：发送完整上下文
                 config: { ...modelConfig, stream: true },
                 plugins: [],
@@ -903,10 +910,10 @@ export const useChatStore = createPersistStore(
                 assistantUuid: undefined,
                 threadUuid: undefined,
                 onUpdate(msg) {
-                  nextBotMessage.streaming = true;
+                  botMsg.streaming = true;
                   if (msg) {
                     // 循环迭代中同样过滤 tool_call 标签，只显示前置说明文字
-                    nextBotMessage.content = getDisplayContent(msg, true);
+                    botMsg.content = getDisplayContent(msg, true);
                   }
                   updateSessionState();
                 },
@@ -916,40 +923,63 @@ export const useChatStore = createPersistStore(
                 onUpdateRunStep() {},
                 onUpdateMessages() {},
                 async onFinish(nextMessage) {
-                  nextBotMessage.streaming = false;
+                  botMsg.streaming = false;
                   if (nextMessage) {
                     // onFinish 里收到的是完整原始内容（含 tool_call 标签）
                     // 保存到 attr.rawContent，以便后续迭代发送完整上下文
                     if (hasToolCalls(nextMessage)) {
-                      nextBotMessage.attr.rawContent = nextMessage;
+                      botMsg.attr.rawContent = nextMessage;
                     }
                     // UI 显示时只保留 tool_call 之前的部分
-                    nextBotMessage.content = getDisplayContent(nextMessage);
+                    botMsg.content = getDisplayContent(nextMessage);
                     updateSessionState();
                     // 递归：继续检测工具调用（传入原始完整内容）
-                    await runAgentIteration(
-                      nextBotMessage,
-                      nextMessage,
-                      iteration + 1,
-                    );
+                    await runAgentIteration(botMsg, nextMessage, nextIteration);
                   }
-                  ChatControllerPool.remove(session.id, nextBotMessage.id);
+                  ChatControllerPool.remove(session.id, botMsg.id);
                   iterResolve();
                 },
                 onError(error) {
                   const isAborted = error.message.includes("aborted");
-                  nextBotMessage.content +=
-                    "\n\n[工具调用出错: " + error.message + "]";
-                  nextBotMessage.streaming = false;
-                  nextBotMessage.isError = !isAborted;
-                  updateSessionState();
-                  ChatControllerPool.remove(session.id, nextBotMessage.id);
-                  iterResolve();
+                  botMsg.streaming = false;
+                  ChatControllerPool.remove(session.id, botMsg.id);
+
+                  if (!isAborted && nextIteration < MAX_AGENT_ITERATIONS) {
+                    // 工具调用出错：不终止循环，将错误结果传回智能体让其自行处理
+                    console.warn(
+                      `[AgentMode] LLM call failed at iteration ${nextIteration}, passing error to agent:`,
+                      error,
+                    );
+                    const errorFeedbackContent = `<tool_result name="__error__" error="true">\n${error.message}\n</tool_result>`;
+                    const errorFeedbackMsg = createMessage({
+                      role: "user",
+                      content: errorFeedbackContent,
+                    });
+                    errorFeedbackMsg.attr.agentHidden = true;
+                    // 将失败的 bot 占位消息隐藏（内容为空，无需展示）
+                    botMsg.content = "";
+                    botMsg.attr.agentHidden = true;
+                    session.messages.push(errorFeedbackMsg);
+                    updateSessionState();
+                    // 继续循环：以错误反馈消息为起点，再次调用 LLM
+                    callLLMAndContinue(
+                      errorFeedbackMsg,
+                      nextIteration + 1,
+                      iterResolve,
+                    );
+                  } else {
+                    // 用户中止 或 已达最大迭代次数：正常终止循环
+                    botMsg.content +=
+                      "\n\n[工具调用出错: " + error.message + "]";
+                    botMsg.isError = !isAborted;
+                    updateSessionState();
+                    iterResolve();
+                  }
                 },
                 onController(controller) {
                   ChatControllerPool.addController(
                     session.id,
-                    nextBotMessage.id,
+                    botMsg.id,
                     controller,
                   );
                 },
@@ -961,6 +991,12 @@ export const useChatStore = createPersistStore(
                 );
                 iterResolve();
               });
+          };
+
+          // 6-7. 使用 Promise 包装，确保 runAgentIteration 真正等待流式完成后才返回，
+          // 避免 fetchEventSource 内部异步导致父级 .finally() 过早触发。
+          await new Promise<void>((iterResolve) => {
+            callLLMAndContinue(toolResultMessage, iteration + 1, iterResolve);
           });
         };
 
