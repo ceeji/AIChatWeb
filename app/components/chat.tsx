@@ -134,6 +134,7 @@ import { isAgentModeSupported } from "../tools/index";
 import { AgentTasksPanel } from "./agent-tasks-panel";
 import { useAgentTaskStore } from "../store/agent-tasks";
 import { useAgentModeStore } from "../store/agent-mode";
+import { hasToolCalls } from "../utils/tool-calling";
 
 const Markdown = dynamic(async () => (await import("./markdown")).Markdown, {
   loading: () => <LoadingIcon />,
@@ -1770,6 +1771,28 @@ function ChatCom(props: {
   const agentModeSetEnabled = useAgentModeStore((s) => s.setEnabled);
   const agentMode = agentModeSupported ? agentModeEnabled : false;
   const clearAgentTasks = useAgentTaskStore((s) => s.clearTasks);
+
+  // 加载历史记录时，若检测到工具调用相关内容，自动开启智能体模式
+  useEffect(() => {
+    if (!agentModeSupported || agentModeEnabled) return;
+    const hasAgentHistory = session.messages.some((msg) => {
+      if (msg.attr?.isToolLoop || msg.attr?.agentHidden) return true;
+      if (msg.toolMessages && msg.toolMessages.length > 0) return true;
+      if (typeof msg.content === "string" && hasToolCalls(msg.content))
+        return true;
+      if (
+        msg.attr?.rawContent &&
+        typeof msg.attr.rawContent === "string" &&
+        hasToolCalls(msg.attr.rawContent)
+      )
+        return true;
+      return false;
+    });
+    if (hasAgentHistory) {
+      agentModeSetEnabled(session.id, true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session.id, session.messages.length]);
 
   const toggleAgentMode = () => {
     if (agentModeSupported) {

@@ -335,16 +335,17 @@ export const useChatStore = createPersistStore(
       async updateSessionMaxTokens(
         modelConfig: ModelConfig,
       ): Promise<ModelConfig> {
-        // 图像类模型不需要大 context，直接返回
-        if (modelConfig.contentType === "Image") {
+        const modelName = modelConfig.model ?? "";
+        // 图像类模型：按 contentType 或名称（含图/视频/video/sora/veo/Midjourney/首尾帧/image）判断，不修改 max_tokens
+        const isImageModel =
+          modelConfig.contentType === "Image" ||
+          /图|视频|video|sora|veo|midjourney|首尾帧|image/i.test(modelName);
+        if (isImageModel) {
           return modelConfig;
         }
-        // 特定写作专用模型给更高上限
-        if (modelConfig.model == "AI写作专用") {
-          modelConfig.max_tokens = 180000;
-        } else if (modelConfig.max_tokens < 100000) {
-          // 非图像模型确保至少 100K tokens
-          modelConfig.max_tokens = 100000;
+        // 名称含 claude/gpt/deepseek/qwen/gemini 的模型统一设为 160k
+        if (/claude|gpt|deepseek|qwen|gemini/i.test(modelName)) {
+          modelConfig.max_tokens = 160000;
         }
 
         return modelConfig;
