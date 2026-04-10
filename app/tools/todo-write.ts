@@ -11,6 +11,7 @@
 
 import { LocalTool } from "./types";
 import { useAgentTaskStore, AgentTask, TaskStatus } from "../store/agent-tasks";
+import { useChatStore } from "../store/chat";
 
 const VALID_STATUSES: TaskStatus[] = [
   "pending",
@@ -65,7 +66,9 @@ export const todoWriteTool: LocalTool = {
       return `错误：todos 格式不正确——${msg}。请使用 JSON 数组格式。`;
     }
 
-    useAgentTaskStore.getState().setTasks(tasks);
+    useAgentTaskStore
+      .getState()
+      .setTasks(useChatStore.getState().currentSession().id, tasks);
 
     const counts = {
       done: tasks.filter((t) => t.status === "done").length,

@@ -1,5 +1,6 @@
 import React from "react";
 import { useAgentTaskStore, AgentTask, TaskStatus } from "../store/agent-tasks";
+import { useChatStore } from "../store/chat";
 import styles from "./agent-tasks-panel.module.scss";
 
 function StatusIcon({ status }: { status: TaskStatus }) {
@@ -50,8 +51,10 @@ function TaskItem({ task }: { task: AgentTask }) {
  * 用户可点击右上角关闭按钮隐藏；AI 再次调用 todowrite 时自动恢复显示。
  */
 export function AgentTasksPanel() {
-  const tasks = useAgentTaskStore((s) => s.tasks);
-  const dismissed = useAgentTaskStore((s) => s.dismissed);
+  const sessionId = useChatStore((s) => s.currentSession().id);
+  const sessions = useAgentTaskStore((s) => s.sessions);
+  const tasks = sessions[sessionId]?.tasks ?? [];
+  const dismissed = sessions[sessionId]?.dismissed ?? false;
   const dismiss = useAgentTaskStore((s) => s.dismiss);
 
   if (tasks.length === 0 || dismissed) return null;
@@ -77,7 +80,7 @@ export function AgentTasksPanel() {
         <button
           className={styles["agent-tasks-close-btn"]}
           title="关闭计划面板"
-          onClick={dismiss}
+          onClick={dismiss.bind(null, sessionId)}
         >
           ✕
         </button>

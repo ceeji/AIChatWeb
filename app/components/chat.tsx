@@ -1377,7 +1377,7 @@ function ChatCom(props: {
     }
 
     // 新任务开始时清空上一轮的任务面板
-    if (agentMode) clearAgentTasks();
+    if (agentMode) clearAgentTasks(session.id);
 
     setIsLoading(true);
     props.setRequestingSession(session);
@@ -1776,7 +1776,7 @@ function ChatCom(props: {
       const next = !agentModeEnabled;
       agentModeSetEnabled(session.id, next);
       // 关闭智能体模式时清除任务面板
-      if (!next) clearAgentTasks();
+      if (!next) clearAgentTasks(session.id);
     }
   };
 

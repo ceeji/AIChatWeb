@@ -2,6 +2,7 @@
  * Agent 任务列表状态（无需持久化，会话级别）
  *
  * 由 todowrite 工具写入，AgentTasksPanel 读取展示。
+ * 任务按 sessionId 独立存储，切换对话后面板能正确反映各自的任务列表。
  */
 
 import { create } from "zustand";
@@ -14,22 +15,56 @@ export interface AgentTask {
   status: TaskStatus;
 }
 
-interface AgentTaskState {
+interface SessionTaskState {
   tasks: AgentTask[];
-  /** 用户手动关闭了面板 */
   dismissed: boolean;
-  /** 设置（替换）整个任务列表；同时重置 dismissed 以便重新显示 */
-  setTasks: (tasks: AgentTask[]) => void;
-  /** 清空（新对话开始或关闭智能体模式时调用） */
-  clearTasks: () => void;
-  /** 用户点击关闭按钮，隐藏面板 */
-  dismiss: () => void;
 }
 
-export const useAgentTaskStore = create<AgentTaskState>((set) => ({
-  tasks: [],
-  dismissed: false,
-  setTasks: (tasks) => set({ tasks, dismissed: false }),
-  clearTasks: () => set({ tasks: [], dismissed: false }),
-  dismiss: () => set({ dismissed: true }),
+interface AgentTaskState {
+  /** 按 sessionId 存储各会话的任务状态 */
+  sessions: Record<string, SessionTaskState>;
+  /** 设置（替换）指定会话的整个任务列表；同时重置 dismissed 以便重新显示 */
+  setTasks: (sessionId: string, tasks: AgentTask[]) => void;
+  /** 清空指定会话的任务（关闭智能体模式或删除对话时调用） */
+  clearTasks: (sessionId: string) => void;
+  /** 用户点击关闭按钮，隐藏指定会话的面板 */
+  dismiss: (sessionId: string) => void;
+  /** 获取指定会话的任务列表（无则返回空数组） */
+  getSessionTasks: (sessionId: string) => AgentTask[];
+  /** 获取指定会话的 dismissed 状态 */
+  getSessionDismissed: (sessionId: string) => boolean;
+}
+
+export const useAgentTaskStore = create<AgentTaskState>((set, get) => ({
+  sessions: {},
+
+  setTasks: (sessionId, tasks) =>
+    set((state) => ({
+      sessions: {
+        ...state.sessions,
+        [sessionId]: { tasks, dismissed: false },
+      },
+    })),
+
+  clearTasks: (sessionId) =>
+    set((state) => {
+      const next = { ...state.sessions };
+      delete next[sessionId];
+      return { sessions: next };
+    }),
+
+  dismiss: (sessionId) =>
+    set((state) => ({
+      sessions: {
+        ...state.sessions,
+        [sessionId]: {
+          tasks: state.sessions[sessionId]?.tasks ?? [],
+          dismissed: true,
+        },
+      },
+    })),
+
+  getSessionTasks: (sessionId) => get().sessions[sessionId]?.tasks ?? [],
+  getSessionDismissed: (sessionId) =>
+    get().sessions[sessionId]?.dismissed ?? false,
 }));
