@@ -25,12 +25,8 @@ export const AGENT_MODE_UNSUPPORTED_MODELS: string[] = [
   "vision", // gpt-4-vision-preview 等纯图像分析模型
   // 中文图像/视频生成类模型
   "视频",
-  "图生",
-  "生图",
-  "文生图",
   "即梦",
-  "绘图",
-  "画图",
+  "图", // 包含"图"字的图像生成模型（文生图、图生图等）
 ];
 
 /**
