@@ -35,10 +35,8 @@ async function parsePdf(
   // Dynamic import so pdfjs-dist is not in the initial bundle
   const pdfjsLib = await import("pdfjs-dist");
 
-  // Set the worker source – use the bundled legacy worker via CDN fallback
-  if (!pdfjsLib.GlobalWorkerOptions.workerSrc) {
-    pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
-  }
+  // Use local worker file served from /public — no CDN dependency
+  pdfjsLib.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
 
   const arrayBuffer = await file.arrayBuffer();
   onProgress?.({ phase: "parsing", ratio: 0 });

@@ -18,6 +18,9 @@ RUN npm install
 
 COPY . .
 
+# Ensure pdfjs worker is in public (in case not committed to repo)
+RUN cp -n node_modules/pdfjs-dist/build/pdf.worker.min.mjs public/pdf.worker.min.mjs 2>/dev/null || true
+
 RUN chmod +x /app/node_modules/.bin/next
 RUN chmod +x /app/node_modules/.bin/cross-env
 
