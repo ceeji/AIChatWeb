@@ -21,6 +21,8 @@ import { callMcpTool } from "./mcp-client";
 export function buildToolSystemPrompt(tools: ToolDefinition[]): string {
   if (tools.length === 0) return "";
 
+  const hasTodoWrite = tools.some((t) => t.name === "todowrite");
+
   const toolList = tools
     .map((tool) => {
       const params = JSON.stringify(tool.parameters, null, 2);
@@ -28,15 +30,26 @@ export function buildToolSystemPrompt(tools: ToolDefinition[]): string {
     })
     .join("\n\n");
 
+  const planningSection = hasTodoWrite
+    ? `
+**任务规划要求（必须遵守）：**
+- 接到复杂任务后，**第一步必须调用 todowrite 工具**列出完整执行计划，所有步骤初始状态为 pending
+- 每个步骤开始前，调用 todowrite 将该步骤状态更新为 in-progress（同时保留其他步骤）
+- 每个步骤完成后，调用 todowrite 将该步骤状态更新为 done（同时保留其他步骤）
+- 当所有步骤均为 done/failed、不再需要调用任何工具时，**直接输出最终答案**，不要再调用任何工具
+- todowrite 每次调用必须包含**全部步骤**（包括已完成的），不要只传当前步骤
+`
+    : "";
+
   return `# 智能体模式（Agent Mode）
 
 你当前运行在 **智能体循环（Agentic Loop）** 中：
 1. 你接收用户的请求
 2. 分析是否需要调用工具来获取信息或执行操作
-3. 如需调用工具，以规定格式输出工具调用，系统会自动执行并将结果返回给你
+3. 如需调用工具，以规定格式输出工具调用，系统会自动执行并将结果返回给你（工具调用中的中间参数，不要在工具调用外重复输出，如果有必要，只要总结两句i在做什么即可）
 4. 你根据工具结果继续思考，直到可以给出最终答案
 5. 整个循环最多可以迭代 15 次，请合理规划步骤
-
+${planningSection}
 **工具调用格式**（严格遵守，不得修改标签格式）：
 
 <tool_call>

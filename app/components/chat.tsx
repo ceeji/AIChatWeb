@@ -131,6 +131,9 @@ import {
 } from "../utils/document-parser";
 import { AttachedDocument } from "../store/chat";
 import { isAgentModeSupported } from "../tools/index";
+import { AgentTasksPanel } from "./agent-tasks-panel";
+import { useAgentTaskStore } from "../store/agent-tasks";
+import { useAgentModeStore } from "../store/agent-mode";
 
 const Markdown = dynamic(async () => (await import("./markdown")).Markdown, {
   loading: () => <LoadingIcon />,
@@ -1373,6 +1376,9 @@ function ChatCom(props: {
       );
     }
 
+    // 新任务开始时清空上一轮的任务面板
+    if (agentMode) clearAgentTasks();
+
     setIsLoading(true);
     props.setRequestingSession(session);
     chatStore
@@ -1760,12 +1766,17 @@ function ChatCom(props: {
     session.mask.modelConfig.contentType,
     mjImageMode,
   );
-  const [agentModeEnabled, setAgentModeEnabled] = useState<boolean>(false);
+  const agentModeEnabled = useAgentModeStore((s) => s.isEnabled(session.id));
+  const agentModeSetEnabled = useAgentModeStore((s) => s.setEnabled);
   const agentMode = agentModeSupported ? agentModeEnabled : false;
+  const clearAgentTasks = useAgentTaskStore((s) => s.clearTasks);
 
   const toggleAgentMode = () => {
     if (agentModeSupported) {
-      setAgentModeEnabled((prev) => !prev);
+      const next = !agentModeEnabled;
+      agentModeSetEnabled(session.id, next);
+      // 关闭智能体模式时清除任务面板
+      if (!next) clearAgentTasks();
     }
   };
 
@@ -2920,6 +2931,7 @@ function ChatCom(props: {
       </div>
 
       <div className={styles["chat-input-panel"]}>
+        {agentMode && <AgentTasksPanel />}
         <PromptHints prompts={promptHints} onPromptSelect={onPromptSelect} />
 
         <ChatActions

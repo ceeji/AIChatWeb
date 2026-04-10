@@ -10,6 +10,7 @@ import { ToolDefinition } from "./types";
 import { exaSearchTool } from "./exa-search";
 import { markdownToWordTool } from "./markdown-to-word";
 import { fetchWebpageTool } from "./fetch-webpage";
+import { todoWriteTool } from "./todo-write";
 
 // ────────────────────────────────────────────────────────────
 // 模型黑名单：包含这些子串的模型名不支持智能体模式
@@ -83,6 +84,7 @@ export function getAllTools(): ToolDefinition[] {
 // 注册内置工具
 // 在此处添加 registerTool(yourTool) 来注册自定义工具
 // ────────────────────────────────────────────────────────────
+registerTool(todoWriteTool); // 必须第一个注册，便于系统提示引导规划优先
 registerTool(exaSearchTool);
 registerTool(markdownToWordTool);
 registerTool(fetchWebpageTool);

@@ -62,7 +62,7 @@ export const markdownToWordTool: LocalTool = {
       const blob = await Packer.toBlob(doc);
       triggerDownload(blob, `${filename}.docx`);
 
-      return `Word 文档"${filename}.docx"已成功生成并开始下载。`;
+      return `Word 文档"${filename}.docx"已成功生成，请提示用户，如果你使用的是电脑浏览器，可以查看右上角（或其他位置）浏览器的下载提示。如果是手机，请查看浏览器上方、下方的下载提醒、弹窗或通知。 `;
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
       return `生成 Word 文档时出错：${msg}`;
