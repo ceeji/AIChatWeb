@@ -13,16 +13,15 @@ WORKDIR /app
 
 COPY package.json package-lock.json ./
 
-RUN npm config set registry https://registry.npmmirror.com/
-RUN npm install
+RUN npm config set registry https://registry.npmmirror.com/ && \
+    npm ci
 
 COPY . .
 
 # Ensure pdfjs worker is in public (in case not committed to repo)
-RUN cp -n node_modules/pdfjs-dist/build/pdf.worker.min.mjs public/pdf.worker.min.mjs 2>/dev/null || true
-
-RUN chmod +x /app/node_modules/.bin/next
-RUN chmod +x /app/node_modules/.bin/cross-env
+RUN cp -n node_modules/pdfjs-dist/build/pdf.worker.min.mjs public/pdf.worker.min.mjs 2>/dev/null || true && \
+    chmod +x /app/node_modules/.bin/next && \
+    chmod +x /app/node_modules/.bin/cross-env
 
 RUN npm run build
 

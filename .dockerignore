@@ -1,0 +1,27 @@
+# Dependencies
+node_modules
+
+# Build outputs
+.next
+out
+
+# Development files
+.git
+.gitignore
+.env*.local
+
+# Tauri native app build
+src-tauri/target
+
+# Docs and scripts (not needed in image)
+docs
+scripts
+
+# Misc
+*.md
+*.log
+.DS_Store
+Thumbs.db
+
+# VS Code
+.vscode
