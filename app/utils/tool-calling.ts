@@ -38,6 +38,7 @@ export function buildToolSystemPrompt(tools: ToolDefinition[]): string {
 - 每个步骤完成后，调用 todowrite 将该步骤状态更新为 done（同时保留其他步骤）
 - 当所有步骤均为 done/failed、不再需要调用任何工具时，**直接输出最终答案**，不要再调用任何工具
 - todowrite 每次调用必须包含**全部步骤**（包括已完成的），不要只传当前步骤
+- 你可以使用多个工具调用，尽量把 todowrite 和其他调用并行使用减少往返轮次，单独调用意义不大
 `
     : "";
 

@@ -244,8 +244,14 @@ export class ChatGPTApi implements LLMApi {
           }
 
           if (remainText.length > 0) {
-            responseText += remainText[0];
-            remainText = remainText.slice(1);
+            // 根据积压量动态批量输出，避免后端快时前端一直拖尾巴
+            // 少于 64 字时逐字输出（视觉流畅）；大量积压时每帧最多输出 6 字
+            const batchSize =
+              remainText.length < 64
+                ? 1
+                : Math.min(18, Math.ceil(remainText.length / 32));
+            responseText += remainText.slice(0, batchSize);
+            remainText = remainText.slice(batchSize);
             options.onUpdate?.(responseText, remainText[0]);
           }
 

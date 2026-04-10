@@ -165,30 +165,18 @@
 .agent-task-content {
   font-size: 12.5px;
   line-height: 1.4;
-  color: #111;
+  // 直接用主题 CSS 变量：亮色 rgb(48,48,48)，深色 rgb(187,187,187)，自动随 .dark 切换
+  color: var(--black);
   flex: 1;
-
-  // 此项目用 .dark class 切换主题，而非 [data-theme="dark"] attribute
-  :global(.dark) & {
-    color: #e8e8e8;
-  }
 
   .status-in-progress & {
     color: #14532d;
     font-weight: 500;
-
-    :global(.dark) & {
-      color: #86efac;
-    }
   }
 
   .status-done & {
     text-decoration: line-through;
-    color: #777;
-
-    :global(.dark) & {
-      color: #555;
-    }
+    color: var(--black-50);
   }
 
   .status-failed & {
