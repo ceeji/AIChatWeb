@@ -821,12 +821,15 @@ export const useChatStore = createPersistStore(
             session.mask?.modelConfig?.contentType;
           nextBotMessage.attr.isToolLoop = true;
 
-          // 5. 将两条消息追加到 session
+          // 5. 先只把 toolResultMessage 追加到 session；
+          //    nextBotMessage（内容为空的 streaming 占位）稍后再加，
+          //    避免 getMessagesWithMemory 把它包含进去发给服务器
+          //    → 服务器会因"最新消息内容为空"而报错（code:10300）
           get().updateLocalCurrentSession((s) => {
-            s.messages = s.messages.concat([toolResultMessage, nextBotMessage]);
+            s.messages = s.messages.concat([toolResultMessage]);
           });
 
-          // 6. 重新构建完整对话上下文（含新加的隐藏消息）
+          // 6. 重新构建完整对话上下文（此时 nextBotMessage 尚未入列）
           const nextRecentMessages =
             get().getMessagesWithMemory(websiteConfigStore);
           // 对于非服务端同步会话，也把工具提示放到 nextRecentMessages 首位
@@ -838,6 +841,11 @@ export const useChatStore = createPersistStore(
               }),
             );
           }
+
+          // 上下文确定后，再把 nextBotMessage 加入 session（供 UI streaming 渲染）
+          get().updateLocalCurrentSession((s) => {
+            s.messages = s.messages.concat([nextBotMessage]);
+          });
 
           // 7. 再次调用 LLM（不携带 plugins，agent 循环内部不走 langchain）
           // 使用 Promise 包装，确保 runAgentIteration 真正等待流式完成后才返回，
