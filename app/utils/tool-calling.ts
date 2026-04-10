@@ -134,9 +134,19 @@ export function removeToolCallTags(text: string): string {
  * 这样 streaming 过程中工具调用内容不会暴露给用户。
  */
 export function getDisplayContent(streamingText: string): string {
+  // 1. 完整标签：找到 <tool_call> 直接截断
   const idx = streamingText.indexOf("<tool_call>");
-  if (idx === -1) return streamingText;
-  return streamingText.slice(0, idx).trimEnd();
+  if (idx !== -1) return streamingText.slice(0, idx).trimEnd();
+
+  // 2. 部分标签：逐字符动画时尾部可能出现 "<", "<t", "<to" 等前缀，也需要隐藏，
+  //    避免 streaming 过程中短暂暴露 XML 片段给用户。
+  const tag = "<tool_call>";
+  for (let len = tag.length - 1; len >= 1; len--) {
+    if (streamingText.endsWith(tag.slice(0, len))) {
+      return streamingText.slice(0, streamingText.length - len).trimEnd();
+    }
+  }
+  return streamingText;
 }
 
 // ────────────────────────────────────────────────────────────

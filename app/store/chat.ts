@@ -1055,6 +1055,43 @@ export const useChatStore = createPersistStore(
                 );
                 message = content + message;
               }
+              // 智能体模式：onFinish 收到的 message 是完整文本，直接用它检测工具调用。
+              // 不能用 _rawAgentContent —— 字符动画（requestAnimationFrame）与 HTTP 连接
+              // 关闭是独立的：finish() 触发时动画可能还在中途，_rawAgentContent 仅含部分文本，
+              // 造成 hasToolCalls 返回 false、工具循环从不启动的竞态 bug。
+              const fullMessage = message; // message = responseText + remainText，始终完整
+              if (isAgentMode && hasToolCalls(fullMessage)) {
+                // 保存原始内容（含 tool_call XML）到 attr，发送上下文时使用完整版本
+                botMessage.attr.rawContent = fullMessage;
+                // UI 只保留 tool_call 之前的说明文字，避免 XML 暴露给用户
+                botMessage.content = getDisplayContent(fullMessage);
+                botMessage.attr.isToolLoop = true;
+                // 先触发 onNewMessage（保存对话记录），内容用过滤后版本
+                get().onNewMessage(
+                  websiteConfigStore,
+                  botMessage,
+                  token,
+                  navigateToLogin,
+                );
+                if (session.uuid) {
+                  get().fetchServerMessageId(
+                    session,
+                    [userMessage, botMessage],
+                    token,
+                  );
+                }
+                get().updateLocalCurrentSession((s) => {
+                  s.messages = s.messages.concat();
+                });
+                // 异步执行工具循环，不阻塞 onFinish 回调
+                runAgentIteration(botMessage, fullMessage, 0).finally(() => {
+                  onFinish();
+                  ChatControllerPool.remove(session.id, botMessage.id);
+                  if (logout) navigateToLogin();
+                });
+                return; // 提前返回，等待 agent 循环完成后再 onFinish
+              }
+              // 普通模式（或 agent 模式但本轮无工具调用）
               botMessage.content = message;
               get().onNewMessage(
                 websiteConfigStore,
@@ -1068,28 +1105,6 @@ export const useChatStore = createPersistStore(
                   [userMessage, botMessage],
                   token,
                 );
-              }
-
-              // 智能体模式：检测工具调用，若有则启动迭代循环
-              // 优先使用 _rawAgentContent（完整原始内容，含 tool_call 标签）
-              const fullMessage =
-                isAgentMode && _rawAgentContent ? _rawAgentContent : message;
-              if (isAgentMode && hasToolCalls(fullMessage)) {
-                // 保存原始内容（含 tool_call XML）到 attr，发送上下文时使用完整版本
-                botMessage.attr.rawContent = fullMessage;
-                // UI 只保留 tool_call 之前的说明文字
-                botMessage.content = getDisplayContent(fullMessage);
-                botMessage.attr.isToolLoop = true;
-                get().updateLocalCurrentSession((s) => {
-                  s.messages = s.messages.concat();
-                });
-                // 异步执行工具循环，不阻塞 onFinish 回调
-                runAgentIteration(botMessage, fullMessage, 0).finally(() => {
-                  onFinish();
-                  ChatControllerPool.remove(session.id, botMessage.id);
-                  if (logout) navigateToLogin();
-                });
-                return; // 提前返回，等待 agent 循环完成后再 onFinish
               }
             }
             onFinish();
