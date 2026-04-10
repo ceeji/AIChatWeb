@@ -769,6 +769,12 @@ export const useChatStore = createPersistStore(
           rawMessage: string,
           iteration: number,
         ): Promise<void> => {
+          // ✅ 使用 helper 函数触发 UI 更新，确保所有消息操作都基于捕获的 session 对象
+          // 这样即使用户尝试切换对话，也只会触发 UI 锁，不会影响数据正确性
+          const updateSessionState = () => {
+            set(() => ({ sessions: get().sessions }));
+          };
+
           const toolCalls = detectAllToolCalls(rawMessage);
           if (toolCalls.length === 0 || iteration >= MAX_AGENT_ITERATIONS) {
             // ── 迭代结束（无更多工具调用 或 达到最大轮次）──
@@ -811,9 +817,7 @@ export const useChatStore = createPersistStore(
           // 1. 把包含工具调用的 bot 消息标记为隐藏
           currentBotMsg.attr.agentHidden = true;
           currentBotMsg.attr.isToolLoop = true;
-          get().updateLocalCurrentSession((s) => {
-            s.messages = s.messages.concat();
-          });
+          updateSessionState();
 
           // 2. 并行执行所有工具
           let toolResults;
@@ -852,9 +856,8 @@ export const useChatStore = createPersistStore(
           //    nextBotMessage（内容为空的 streaming 占位）稍后再加，
           //    避免 getMessagesWithMemory 把它包含进去发给服务器
           //    → 服务器会因"最新消息内容为空"而报错（code:10300）
-          get().updateLocalCurrentSession((s) => {
-            s.messages = s.messages.concat([toolResultMessage]);
-          });
+          session.messages.push(toolResultMessage);
+          updateSessionState();
 
           // 6. 重新构建完整对话上下文（此时 nextBotMessage 尚未入列）
           const nextRecentMessages =
@@ -870,9 +873,8 @@ export const useChatStore = createPersistStore(
           }
 
           // 上下文确定后，再把 nextBotMessage 加入 session（供 UI streaming 渲染）
-          get().updateLocalCurrentSession((s) => {
-            s.messages = s.messages.concat([nextBotMessage]);
-          });
+          session.messages.push(nextBotMessage);
+          updateSessionState();
 
           // 7. 再次调用 LLM（不携带 plugins，agent 循环内部不走 langchain）
           // 使用 Promise 包装，确保 runAgentIteration 真正等待流式完成后才返回，
@@ -905,9 +907,7 @@ export const useChatStore = createPersistStore(
                     // 循环迭代中同样过滤 tool_call 标签，只显示前置说明文字
                     nextBotMessage.content = getDisplayContent(msg, true);
                   }
-                  get().updateLocalCurrentSession((s) => {
-                    s.messages = s.messages.concat();
-                  });
+                  updateSessionState();
                 },
                 onToolUpdate() {},
                 onCreateRun() {},
@@ -924,9 +924,7 @@ export const useChatStore = createPersistStore(
                     }
                     // UI 显示时只保留 tool_call 之前的部分
                     nextBotMessage.content = getDisplayContent(nextMessage);
-                    get().updateLocalCurrentSession((s) => {
-                      s.messages = s.messages.concat();
-                    });
+                    updateSessionState();
                     // 递归：继续检测工具调用（传入原始完整内容）
                     await runAgentIteration(
                       nextBotMessage,
@@ -943,9 +941,7 @@ export const useChatStore = createPersistStore(
                     "\n\n[工具调用出错: " + error.message + "]";
                   nextBotMessage.streaming = false;
                   nextBotMessage.isError = !isAborted;
-                  get().updateLocalCurrentSession((s) => {
-                    s.messages = s.messages.concat();
-                  });
+                  updateSessionState();
                   ChatControllerPool.remove(session.id, nextBotMessage.id);
                   iterResolve();
                 },
