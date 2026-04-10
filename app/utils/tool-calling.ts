@@ -203,5 +203,5 @@ export function formatToolResults(results: ToolResult[]): string {
     return `<tool_result name="${r.name}"${r.isError ? ' error="true"' : ""}>\n${r.result}\n</tool_result>`;
   });
 
-  return `以下是工具调用的执行结果，请根据这些结果继续回答用户的问题：\n\n${parts.join("\n\n")}`;
+  return `${parts.join("\n\n")}`;
 }

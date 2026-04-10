@@ -50,6 +50,8 @@ export interface ChatOptions {
   userMessage?: ChatMessage;
   botMessage: ChatMessage;
   content: string;
+  /** 智能体模式：跳过 server-sync 单条消息优化，发送完整上下文 */
+  agentMode?: boolean;
 
   config: LLMConfig;
   plugins: PluginActionModel[];

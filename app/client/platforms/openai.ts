@@ -79,10 +79,12 @@ export class ChatGPTApi implements LLMApi {
     const plugins = options.plugins;
     const isMessageStructComplex =
       options.mask?.modelConfig?.messageStruct === "complex";
+    // 智能体模式需要发送完整上下文，不使用 server-sync 单条消息优化
     const isServerSyncedChat =
       typeof options.sessionUuid == "string" &&
       options.sessionUuid.length > 0 &&
-      options.userMessage != null;
+      options.userMessage != null &&
+      !options.agentMode;
 
     console.log(
       "[chat] isServerSyncedChat: ",
@@ -117,7 +119,8 @@ export class ChatGPTApi implements LLMApi {
           return {
             id: message.id,
             role: message.role,
-            content: message.content,
+            // 智能体模式下优先使用存储的原始内容（含 tool_call XML），否则用展示内容
+            content: (message as any).attr?.rawContent ?? message.content,
           };
         }
       }

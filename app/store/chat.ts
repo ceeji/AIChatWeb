@@ -118,6 +118,8 @@ export interface Attr {
   agentHidden?: boolean;
   /** 工具调用循环中正在执行工具 */
   isToolLoop?: boolean;
+  /** 智能体模式下 bot 消息的完整原始内容（含 tool_call XML），用于发送完整上下文 */
+  rawContent?: string;
 }
 
 export interface AttachedDocument {
@@ -845,6 +847,7 @@ export const useChatStore = createPersistStore(
             userMessage: toolResultMessage,
             botMessage: nextBotMessage,
             content: toolResultContent,
+            agentMode: true, // 智能体迭代：发送完整上下文
             config: { ...modelConfig, stream: true },
             plugins: [],
             mask: effectiveMask, // 含工具提示的 mask.context（服务端同步路径使用）
@@ -872,6 +875,10 @@ export const useChatStore = createPersistStore(
               nextBotMessage.streaming = false;
               if (nextMessage) {
                 // onFinish 里收到的是完整原始内容（含 tool_call 标签）
+                // 保存到 attr.rawContent，以便后续迭代发送完整上下文
+                if (hasToolCalls(nextMessage)) {
+                  nextBotMessage.attr.rawContent = nextMessage;
+                }
                 // UI 显示时只保留 tool_call 之前的部分
                 nextBotMessage.content = getDisplayContent(nextMessage);
                 get().updateLocalCurrentSession((s) => {
@@ -917,6 +924,7 @@ export const useChatStore = createPersistStore(
           userMessage: userMessage,
           botMessage: botMessage,
           content: userContent,
+          agentMode: isAgentMode, // 智能体模式：发送完整上下文，不使用单条消息优化
           config: { ...modelConfig, stream: true },
           plugins: plugins,
           mask: effectiveMask, // 含工具提示的 mask.context（服务端同步路径使用）
@@ -1054,6 +1062,8 @@ export const useChatStore = createPersistStore(
               const fullMessage =
                 isAgentMode && _rawAgentContent ? _rawAgentContent : message;
               if (isAgentMode && hasToolCalls(fullMessage)) {
+                // 保存原始内容（含 tool_call XML）到 attr，发送上下文时使用完整版本
+                botMessage.attr.rawContent = fullMessage;
                 // UI 只保留 tool_call 之前的说明文字
                 botMessage.content = getDisplayContent(fullMessage);
                 botMessage.attr.isToolLoop = true;
