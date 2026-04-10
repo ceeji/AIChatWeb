@@ -9,6 +9,7 @@
 import { ToolDefinition } from "./types";
 import { exaSearchTool } from "./exa-search";
 import { markdownToWordTool } from "./markdown-to-word";
+import { fetchWebpageTool } from "./fetch-webpage";
 
 // ────────────────────────────────────────────────────────────
 // 模型黑名单：包含这些子串的模型名不支持智能体模式
@@ -84,3 +85,4 @@ export function getAllTools(): ToolDefinition[] {
 // ────────────────────────────────────────────────────────────
 registerTool(exaSearchTool);
 registerTool(markdownToWordTool);
+registerTool(fetchWebpageTool);

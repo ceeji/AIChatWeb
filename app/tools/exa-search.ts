@@ -13,8 +13,7 @@ export const exaSearchTool: RemoteMcpTool = {
   type: "remote-mcp",
   name: "web_search",
   displayName: "联网搜索",
-  description:
-    "搜索互联网上的实时信息。当用户需要最新资讯、新闻、价格、天气、近期事件等当前知识库中未收录的信息时使用。",
+  description: "搜索互联网上的实时信息。当用户需要搜索联网信息时使用。",
   parameters: {
     type: "object",
     properties: {
